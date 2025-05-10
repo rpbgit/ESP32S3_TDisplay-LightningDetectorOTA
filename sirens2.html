@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alarm Sounds with Web Audio API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        input {
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Play 3 Alarm Sounds</h1>
+    
+    <!-- Volume Slider -->
+    <label for="volume">Volume: </label>
+    <input type="range" id="volume" min="0" max="1" step="0.01" value="0.5">
+
+    <!-- Alarm Buttons -->
+    <button onclick="playAlarm1()">Play Alarm 1</button>
+    <button onclick="playAlarm2()">Play Alarm 2</button>
+    <button onclick="playAlarm3()">Play Alarm 3</button>
+
+    <script>
+        // Get the volume value from the slider
+        function getVolume() {
+            return document.getElementById('volume').value;
+        }
+
+        // Function to create an alarm-like sound with a specific waveform, frequency, and duration
+        function playAlarm(frequency, duration, type) {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            // Set the oscillator type (waveform)
+            oscillator.type = type;
+            // Set the frequency of the alarm
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            // Set the volume from the slider
+            gainNode.gain.value = getVolume();
+
+            // Connect oscillator -> gainNode -> destination (speakers)
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // Start the alarm sound
+            oscillator.start();
+            // Stop the sound after the duration
+            oscillator.stop(audioContext.currentTime + duration / 1000);
+        }
+
+        // Alarm 1: Beeping sound (Square wave, medium pitch)
+        function playAlarm1() {
+            playAlarm(500, 1000, 'square'); // 500 Hz for 1 second with square wave
+        }
+
+        // Alarm 2: Siren-like sound (Sawtooth wave, low pitch sweep)
+        function playAlarm2() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            // Set the oscillator type to sawtooth for a more aggressive sound
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(200, audioContext.currentTime); // Start at 200 Hz
+
+            // Set frequency sweep to simulate a siren
+            oscillator.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 2); // Up to 800 Hz in 2 seconds
+
+            gainNode.gain.value = getVolume(); // Set volume
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // Start the sound
+            oscillator.start();
+            // Stop the sound after 2 seconds
+            oscillator.stop(audioContext.currentTime + 2);
+        }
+
+        // Alarm 3: Pulsating alarm (Triangle wave, repeating pulses)
+        function playAlarm3() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.type = 'triangle'; // Triangle wave for a softer tone
+            oscillator.frequency.setValueAtTime(400, audioContext.currentTime); // 400 Hz tone
+
+            gainNode.gain.value = getVolume(); // Set volume
+            gainNode.gain.value = .02;
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // Start the pulsating alarm
+            oscillator.start();
+
+            // Create a pulse effect by periodically changing the gain
+            let pulsing = true;
+            const interval = setInterval(() => {
+                //gainNode.gain.setValueAtTime(pulsing ? 0 : getVolume(), audioContext.currentTime); // Toggle between full volume and silence
+                gainNode.gain.setValueAtTime(pulsing ? 0 : .02, audioContext.currentTime); // Toggle between full volume and silence
+                pulsing = !pulsing;
+            }, 300); // Change every 300ms
+
+            // Stop the sound and pulsing after 5 seconds
+            setTimeout(() => {
+                clearInterval(interval);
+                oscillator.stop();
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
