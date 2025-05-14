@@ -732,7 +732,6 @@ void loop2(HostCmdEnum & host_command)
 // perform algorithm to determine if we need to turn the power on or off, based on tbd criteria.
 //   the value of the interruptSourceRegister is the value read from the interrupt source register of the AS3935 device
 // so you can do stats based on strikes/noise/disturbers, etc WITHOUT actually reading the ISR again.
-//  name this function whatever you want. 
 void station_management (bool &relayState, byte isr ) 
 {
     static unsigned long strikeCount = 0; // static so we can keep track of the number of strikes
@@ -740,41 +739,52 @@ void station_management (bool &relayState, byte isr )
     static unsigned long noiseCount = 0; // static so we can keep track of the number of noise events
     static unsigned long purgeCount = 0; // static so we can keep track of the number of purges 
 
-    static unsigned long saved_tick = millis(); // grab the tick count after reset, 
+    static unsigned long lastStrikeCount = 0;
+    static unsigned long lastDisturberCount = 0;
+    static unsigned long lastNoiseCount = 0;
+    static unsigned long lastPurgeCount = 0;
 
-    // read this only once each time thru the loop, use it many many times rather than calling millis() each time.
-    unsigned long now = millis(); 
-    if( now - saved_tick >= 10000 ) { // dont print more frequently than 10 seconds, print out the stats to the serial port
-        Serial.printf("Station Mgmt Stats: %d strikes, %d disturbers, %d noise events, %d purges\n", strikeCount, disturberCount, noiseCount, purgeCount);
+    static unsigned long lastRateCalcTick = millis();
+    static unsigned long saved_tick = millis(); // grab the tick count after reset
+
+    unsigned long now = millis();
+    if (now - saved_tick >= 10000) { // 10-second interval for printing stats
+        unsigned long elapsedSeconds = (now - lastRateCalcTick) / 1000;
+        float strikeRate = (strikeCount - lastStrikeCount) / (elapsedSeconds / 60.0);
+        float disturberRate = (disturberCount - lastDisturberCount) / (elapsedSeconds / 60.0);
+        float noiseRate = (noiseCount - lastNoiseCount) / (elapsedSeconds / 60.0);
+        float purgeRate = (purgeCount - lastPurgeCount) / (elapsedSeconds / 60.0);
+
+        Serial.printf("Station Mgmt Stats: %lu strikes (%.2f/min), %lu disturbers (%.2f/min), %lu noise events (%.2f/min), %lu purges (%.2f/min)\n", 
+                      strikeCount, strikeRate, disturberCount, disturberRate, noiseCount, noiseRate, purgeCount, purgeRate);
+
+        lastStrikeCount = strikeCount;
+        lastDisturberCount = disturberCount;
+        lastNoiseCount = noiseCount;
+        lastPurgeCount = purgeCount;
+        lastRateCalcTick = now;
         saved_tick = now; // reset the tick count for next interval.
     }
 
     switch (isr) {
         case LIGHTNING_INT:
-            strikeCount++; // bump the strike counter
-    
-            // to turn off the power do these two lines
-            relayState = false;  // this is a pointer reference to the relay state
-            power_relay_control(relayState); // Toggle the relay
+            strikeCount++;
+            power_relay_control(false);
             break;
-    
+
         case DISTURBER_INT:
-            disturberCount++; // bump the disturber counter
+            disturberCount++;
             break;
-    
+
         case NOISE_INT:
-            noiseCount++; // bump the noise counter
-            // do something with the noise count, like display it on the screen or something.
+            noiseCount++;
             break;
-    
+
         default:
-            purgeCount++; // bump the purge counter
-            // do a purge event, or something else.
-            // this is a catch all for the ISR register, if we get here, we have no idea what happened.
+            purgeCount++;
             break;
     }
-
-}
+} 
 
 // manage the tft power field display by reading the RELAY_SENSE_STATE GPIO pin, encapsulate it here if how we do so changes.
 void manage_tft_power_field()
