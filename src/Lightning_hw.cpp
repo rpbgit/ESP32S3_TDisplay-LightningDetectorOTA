@@ -461,7 +461,7 @@ void setup2()
     // For example you will only get an interrupt after five lightning strikes
     // instead of one. Default is one, and it takes settings of 1, 5, 9 and 16.
     // Followed by its corresponding read function. 
-    Sensor.writeMinLightnings(AS3935MI::AS3935_MNL_5);
+    Sensor.writeMinLightnings(AS3935MI::AS3935_MNL_1);
 
     uint8_t lightVal = Sensor.readMinLightnings();
     Serial.printf("The minimum number of lightning strikes register value is: %#04x\n", lightVal);
@@ -630,7 +630,7 @@ void loop2(HostCmdEnum & host_command)
                 if (distance == 40 ) {  // Handle the case where the device says out of range
                     tft.printf(" Storm is Out of Range    ");
                     WebText("\tOut of Range ");
-                } else if (distance == 1) { // Handle the case where the device says 1 km
+                } else if (distance <= 1) { // Handle the case where the device says 1 km
                     tft.printf(" Storm is Overhead        ");
                     WebText("\tStorm is overhead ");
                 } else {
