@@ -531,7 +531,7 @@ void loop2(HostCmdEnum & host_command)
             faked_event = validValues[randomIndex]; // Assign a random value from the array of valid values
 //Serial.printf("->>>>>> Faked event: %d\n", faked_event);
 //faked_event = LIGHTNING_INT;
-            fake_distance = rand() % 40;
+            fake_distance = rand() % 41;
 //fake_distance = fake_distance == 1 ? 40 : 1;  // toggle between 1 and 40 km
             fake_energy = rand() % (1 << 20);  // 20 bit register, range of values up to 2^20 possible
 
