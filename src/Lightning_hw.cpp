@@ -73,7 +73,7 @@ try to remember to bump this each time a functional mod is done
                             modified ringbuffer a bit. also fixed javascript to handle missing VER field in XML.  the old version of SendXML() has been 
                             retained and commented out in case we need to go back to it.  if all is well remove it in the next release.  added a few 
                             more comments to the code to help explain what is going on.
-14-May-2025 w9zv    v4.1    added floating point math to the distance conversion, handling of Storm overhead, and Storm Out of Range per page 33 of the 
+14-May-2025 w9zv    v4.2    added floating point math to the distance conversion, handling of Storm overhead, and Storm Out of Range per page 33 of the 
                             AS3935MI datasheet.   Added examples of tracking rate/min of events in station_management() function.  
 
 
