@@ -73,11 +73,15 @@ try to remember to bump this each time a functional mod is done
                             modified ringbuffer a bit. also fixed javascript to handle missing VER field in XML.  the old version of SendXML() has been 
                             retained and commented out in case we need to go back to it.  if all is well remove it in the next release.  added a few 
                             more comments to the code to help explain what is going on.
+14-May-2025 w9zv    v4.1    added floating point math to the distance conversion, handling of Storm overhead, and Storm Out of Range per page 33 of the 
+                            AS3935MI datasheet.   Added examples of tracking rate/min of events in station_management() function.  
+
+
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v4.0";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v4.2";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -526,8 +530,9 @@ void loop2(HostCmdEnum & host_command)
             int randomIndex = rand() % 3;  // Generate a random index (0, 1, or 2)
             faked_event = validValues[randomIndex]; // Assign a random value from the array of valid values
 //Serial.printf("->>>>>> Faked event: %d\n", faked_event);
-
-            fake_distance = rand() % 500;
+//faked_event = LIGHTNING_INT;
+            fake_distance = rand() % 40;
+//fake_distance = fake_distance == 1 ? 40 : 1;  // toggle between 1 and 40 km
             fake_energy = rand() % (1 << 20);  // 20 bit register, range of values up to 2^20 possible
 
             Serial.print(".");
@@ -612,19 +617,26 @@ void loop2(HostCmdEnum & host_command)
                 // Lightning! Now how far away is it? Distance estimation takes into account previously seen events.
                 byte distance = Sensor.readStormDistance();
                 distance = faked_event ? fake_distance : distance;
-        
+
+                
                 tft.setCursor(5, 115, FONT_DEFAULT);
                 tft.setTextPadding(tft.width());  // Pad it to the width of the screen
-        
+                
                 // Convert distance to miles (device register output is in km)
-                distance = ((long)distance * 621371L) / 1000000L;
-                if (distance == 1 || distance == 0) {  // Handle the case where the device says 1 km or 0
-                    tft.printf(" Approx <= 1 mile distant");
-                    WebText("\tApprox <= 1 mile distant ", distance);
+//distance = ((long)distance * 621371L) / 1000000L;
+//Serial.printf("\nDistance: %d km\n", distance);
+                const float KM_TO_MILES = 0.621371;
+                float miles = (float)distance * KM_TO_MILES;
+                if (distance == 40 ) {  // Handle the case where the device says out of range
+                    tft.printf(" Storm is Out of Range    ");
+                    WebText("\tOut of Range ");
+                } else if (distance == 1) { // Handle the case where the device says 1 km
+                    tft.printf(" Storm is Overhead        ");
+                    WebText("\tStorm is overhead ");
                 } else {
-                    tft.printf(" Approx  %3d miles distant", distance);
-                    WebText("\tApproximately: %d mi away! ", distance);
-                }
+                    tft.printf(" Approx %.1f miles distant  ", miles);
+                    WebText("\tApproximately: %.1f mi away! ", miles);
+                } 
         
                 // "Lightning Energy" is a pure number without physical meaning
                 long lightEnergy = Sensor.readEnergy();
@@ -779,6 +791,9 @@ void station_management (bool &relayState, byte isr )
         case NOISE_INT:
             noiseCount++;
             break;
+
+        case PASSTHRU_INT:
+            break;   
 
         default:
             purgeCount++;
