@@ -560,7 +560,7 @@ void loop2(HostCmdEnum & host_command)
                 if (noise_accumulator == 0) noise_last = now;  // Initialize `noise_last` if first event
                 noise_accumulator++; // Increment the noise event counter
                 unsigned long elapsed = ((now - noise_last) / 1000) % 10000; // Calculate elapsed time in seconds
-                WebText("Noise - accumulated events since reset %d, ET since last %d\n", noise_accumulator, elapsed);
+                WebText("Noise - accumulated since reset %d, ET since last %d\n", noise_accumulator, elapsed);
         
                 // Update the structure used to build XML response messages
                 pRas->noise_accum = noise_accumulator;
@@ -581,7 +581,7 @@ void loop2(HostCmdEnum & host_command)
                 if (disturber_accumulator == 0) disturber_last = now; // Initialize `disturber_last` if first event
                 disturber_accumulator++; // Increment the disturber event counter
                 unsigned long elapsed = ((now - disturber_last) / 1000) % 10000; // Calculate elapsed time in seconds
-                WebText("Disturber - accumulated events since reset %d, ET since last %d\n", disturber_accumulator, elapsed);
+                WebText("Disturber - accumulated since reset %d, ET since last %d\n", disturber_accumulator, elapsed);
         
                 // Update the structure used to build XML response messages
                 pRas->disturber_accum = disturber_accumulator;
@@ -604,7 +604,7 @@ void loop2(HostCmdEnum & host_command)
 
                 stroke_accumulator++; // Increment the lightning strike counter
                 unsigned long elapsed = ((now - stroke_last) / 1000) % 10000; // Calculate elapsed time in seconds
-                WebText("\nStrike - accumulated events since reset %d, ET since last %d\n", stroke_accumulator, elapsed);
+                WebText("\nStrike - accumulated since reset %d, ET since last %d\n", stroke_accumulator, elapsed);
         
                 // Update the structure used to build XML response messages
                 pRas->strike_accum = stroke_accumulator;
@@ -619,7 +619,7 @@ void loop2(HostCmdEnum & host_command)
                 // Lightning! Now how far away is it? Distance estimation takes into account previously seen events.
                 int distance = Sensor.readStormDistance();
                 distance = gSimulated_Events ? fake_distance : distance;
-Serial.printf("\tDistance: %d km\n", distance);
+//Serial.printf("\tDistance: %d km\n", distance);
 
                 tft.setCursor(5, 115, FONT_DEFAULT);
                 tft.setTextPadding(tft.width());  // Pad it to the width of the screen
@@ -768,7 +768,7 @@ void station_management (bool &relayState, byte isr )
         float noiseRate = (noiseCount - lastNoiseCount) / (elapsedSeconds / 60.0);
         float purgeRate = (purgeCount - lastPurgeCount) / (elapsedSeconds / 60.0);
 
-        Serial.printf("Station Mgmt Stats: %lu strikes (%.2f/min), %lu disturbers (%.2f/min), %lu noise events (%.2f/min), %lu purges (%.2f/min)\n", 
+        WebText("\nStation Mgmt Stats: %lu strikes (%.1f/min), %lu disturbers (%.1f/min), %lu noise events (%.1f/min), %lu purges (%.1f/min)\n", 
                       strikeCount, strikeRate, disturberCount, disturberRate, noiseCount, noiseRate, purgeCount, purgeRate);
 
         lastStrikeCount = strikeCount;
