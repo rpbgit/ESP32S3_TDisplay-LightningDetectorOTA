@@ -616,15 +616,14 @@ void loop2(HostCmdEnum & host_command)
         
                 // Lightning! Now how far away is it? Distance estimation takes into account previously seen events.
                 int distance = Sensor.readStormDistance();
-                distance = faked_event ? fake_distance : distance;
+                distance = gSimulated_Events ? fake_distance : distance;
+Serial.printf("\tDistance: %d km\n", distance);
 
-                
                 tft.setCursor(5, 115, FONT_DEFAULT);
                 tft.setTextPadding(tft.width());  // Pad it to the width of the screen
                 
                 // Convert distance to miles (device register output is in km)
 //distance = ((long)distance * 621371L) / 1000000L;
-//Serial.printf("\nDistance: %d km\n", distance);
                 const float KM_TO_MILES = 0.621371;
                 float miles = (float)distance * KM_TO_MILES;
                 if (distance == 40 ) {  // Handle the case where the device says out of range
