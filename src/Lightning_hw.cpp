@@ -75,13 +75,15 @@ try to remember to bump this each time a functional mod is done
                             more comments to the code to help explain what is going on.
 14-May-2025 w9zv    v4.21   added floating point math to the distance conversion, handling of Storm overhead, and Storm Out of Range per page 33 of the 
                             AS3935MI datasheet.   Added examples of tracking rate/min of events in station_management() function.  
-
+16-May-2025 w9zv    v4.22   fixed bug in distance calculation, added handling of storm overhead and out of range, accidentally overwrote
+                            the distance with fake_distance value.  added handling of storm overhead and out of range to the web page.  webpage now shows
+                            floating point distance to storm. 
 
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v4.21";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v4.22";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -648,7 +650,7 @@ Serial.printf("\tDistance: %d km\n", distance);
         
                 // Update the structure used to build XML response messages
                 pRas->strike_energy = lightEnergy;
-                pRas->strike_distance = distance;
+                pRas->strike_distance = miles;
         
                 alm_enable_flashcount = ALARM_FLASH_COUNT_PER_ALARM;
                 alm_display_state = true;

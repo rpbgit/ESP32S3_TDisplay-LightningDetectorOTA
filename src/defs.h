@@ -11,7 +11,7 @@ struct RAS_HW_STATUS_STRUCT {
     unsigned long noise_et;
     unsigned long strike_accum;
     unsigned long strike_et;
-    unsigned long strike_distance;  // distance est from storm/strike, NOTE: raw device output value is in Km !!
+    float strike_distance;  // distance est from storm/strike as a float 16-May-2025 w9zv
     unsigned long strike_energy;
     const char *pSoftwareVersion;
 };

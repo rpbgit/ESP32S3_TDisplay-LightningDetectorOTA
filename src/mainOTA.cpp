@@ -398,7 +398,7 @@ void SendXML(AsyncWebServerRequest *request) {
     xmlData += "<DISTURB_ET>" + String(pRas->disturber_et) + "</DISTURB_ET>\n";
     xmlData += "<STRIKE_ACC>" + String(pRas->strike_accum) + "</STRIKE_ACC>\n";
     xmlData += "<STRIKE_ET>" + String(pRas->strike_et) + "</STRIKE_ET>\n";
-    xmlData += "<STRIKE_DIST>" + String(pRas->strike_distance) + "</STRIKE_DIST>\n";
+    xmlData += "<STRIKE_DIST>" + String(pRas->strike_distance,1) + "</STRIKE_DIST>\n"; // 1 decimal place
     xmlData += "<STRIKE_ENER>" + String(pRas->strike_energy) + "</STRIKE_ENER>\n";
 
     // Add version
