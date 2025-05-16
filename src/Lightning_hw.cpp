@@ -540,7 +540,7 @@ void loop2(HostCmdEnum & host_command)
         }
     }
 
-// if ( gEvents_Active_Flag == true && (digitalRead(DetectorIntrReqPin) == HIGH || faked_event != PASSTHRU_INT) ) {
+//  if ( gEvents_Active_Flag == true && (digitalRead(DetectorIntrReqPin) == HIGH || faked_event != PASSTHRU_INT) ) {
     if ( gEvents_Active_Flag == true && (digitalRead(DetectorIntrReqPin) == HIGH || gSimulated_Events) ) {
         
         // according to spec sheet, we need to wait 2ms before reading the interrupt source register
@@ -549,8 +549,8 @@ void loop2(HostCmdEnum & host_command)
         
         // Hardware has alerted us to an event, now we read the interrupt register
         // to see exactly what it is... or we are running the sim, so use the sim generated value/event
-        byte interrupt_reg_value = gSimulated_Events ? faked_event : Sensor.readInterruptSource();
-//Serial.printf("INTERRUPT SOURCE REG VALUE: %#04x\n", interrupt_reg_value);
+        int interrupt_reg_value = gSimulated_Events ? faked_event : Sensor.readInterruptSource();
+//if(interrupt_reg_value != PASSTHRU_INT)Serial.printf("INTERRUPT SOURCE REG VALUE: %#04x\n", interrupt_reg_value);
         switch (interrupt_reg_value) {
             case NOISE_INT: {
                 static unsigned int noise_accumulator = 0;
@@ -602,7 +602,7 @@ void loop2(HostCmdEnum & host_command)
 
                 stroke_accumulator++; // Increment the lightning strike counter
                 unsigned long elapsed = ((now - stroke_last) / 1000) % 10000; // Calculate elapsed time in seconds
-                WebText("Strike - accumulated events since reset %d, ET since last %d\n", stroke_accumulator, elapsed);
+                WebText("\nStrike - accumulated events since reset %d, ET since last %d\n", stroke_accumulator, elapsed);
         
                 // Update the structure used to build XML response messages
                 pRas->strike_accum = stroke_accumulator;
@@ -615,7 +615,7 @@ void loop2(HostCmdEnum & host_command)
                 tft.printf("Strikes:   %4d Last  %4d", stroke_accumulator, elapsed);
         
                 // Lightning! Now how far away is it? Distance estimation takes into account previously seen events.
-                byte distance = Sensor.readStormDistance();
+                int distance = Sensor.readStormDistance();
                 distance = faked_event ? fake_distance : distance;
 
                 
@@ -781,7 +781,7 @@ void station_management (bool &relayState, byte isr )
     switch (isr) {
         case LIGHTNING_INT:
             strikeCount++;
-            power_relay_control(false);
+            //power_relay_control(false);
             break;
 
         case DISTURBER_INT:
