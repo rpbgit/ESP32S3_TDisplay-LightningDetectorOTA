@@ -510,10 +510,10 @@ void loop2(HostCmdEnum & host_command)
     int faked_event = PASSTHRU_INT;
     int fake_distance = 0;
     long fake_energy = 0;
+    int interrupt_reg_value = PASSTHRU_INT; // interrupt status register value from the AS3935
 
     static bool alm_display_state = true;
     static int alm_enable_flashcount = 0;  // enable flashing alarm with non-zero, and value when non-zero is number of flashes.
-
     unsigned long now = millis(); // read this only once each time thru the loop, use it many...
     static long last_event = now;
 
@@ -552,7 +552,7 @@ void loop2(HostCmdEnum & host_command)
         
         // Hardware has alerted us to an event, now we read the interrupt register
         // to see exactly what it is... or we are running the sim, so use the sim generated value/event
-        int interrupt_reg_value = gSimulated_Events ? faked_event : Sensor.readInterruptSource();
+        interrupt_reg_value = gSimulated_Events ? faked_event : Sensor.readInterruptSource();
 //if(interrupt_reg_value != PASSTHRU_INT)Serial.printf("INTERRUPT SOURCE REG VALUE: %#04x\n", interrupt_reg_value);
         switch (interrupt_reg_value) {
             case NOISE_INT: {
@@ -682,10 +682,10 @@ void loop2(HostCmdEnum & host_command)
             }
         }
         
-        // Manage the station based on the strike algorithm and stats
-        station_management(relayState, interrupt_reg_value); // Pass the ISR value to the power management function
     }
-
+    
+    // Manage the station based on the strike algorithm and stats
+    station_management(relayState, interrupt_reg_value); // Pass the ISR value to the power management function
 
     // let commandparser handle any user input commands.
     cp.processInput();
@@ -743,19 +743,17 @@ void loop2(HostCmdEnum & host_command)
     host_command = HostCmdEnum::NO_OP;
 }
 
+
+
+// Main station management function
+// relayState: reference to relay state variable
+// isr: interrupt source register value (event type)
+#define MAX_EVENT_TIMESTAMPS 64
 struct station_management_struct {
     unsigned long strikeCount;
     unsigned long disturberCount;
     unsigned long noiseCount;
     unsigned long purgeCount;
-
-    unsigned long lastStrikeCount;
-    unsigned long lastDisturberCount;
-    unsigned long lastNoiseCount;
-    unsigned long lastPurgeCount;
-
-    unsigned long lastRateCalcTick;
-    unsigned long saved_tick; // grab the tick count after reset
 
     float strikeRate;
     float disturberRate;
@@ -766,71 +764,156 @@ struct station_management_struct {
     float maxDisturberRate;
     float maxNoiseRate;
     float maxPurgeRate;
+
+    // Sliding window buffers
+    unsigned long strikeTimestamps[MAX_EVENT_TIMESTAMPS];
+    int strikeHead, strikeCountInBuf;
+
+    unsigned long disturberTimestamps[MAX_EVENT_TIMESTAMPS];
+    int disturberHead, disturberCountInBuf;
+
+    unsigned long noiseTimestamps[MAX_EVENT_TIMESTAMPS];
+    int noiseHead, noiseCountInBuf;
+
+    unsigned long purgeTimestamps[MAX_EVENT_TIMESTAMPS];
+    int purgeHead, purgeCountInBuf;
+
+    unsigned long lastRateCalcTick;
 };
-// perform algorithm to determine if we need to turn the power on or off, based on tbd criteria.
-//   the value of the interruptSourceRegister is the value read from the interrupt source register of the AS3935 device
-// so you can do stats based on strikes/noise/disturbers, etc WITHOUT actually reading the ISR again.
-void station_management (bool &relayState, byte isr ) 
+
+// Helper function to add an event timestamp to a circular buffer
+// buf: pointer to the buffer array
+// head: pointer to the head index (oldest event)
+// count: pointer to the current number of events in the buffer
+// now: current timestamp (millis)
+void add_event_timestamp(unsigned long *buf, int *head, int *count, unsigned long now) {
+    // Store the new timestamp at the next available position in the circular buffer
+    buf[(*head + *count) % MAX_EVENT_TIMESTAMPS] = now;
+    if (*count < MAX_EVENT_TIMESTAMPS) {
+        // If buffer not full, just increment count
+        (*count)++;
+    } else {
+        // If buffer full, move head forward to overwrite oldest event
+        *head = (*head + 1) % MAX_EVENT_TIMESTAMPS;
+    }
+}
+
+// Helper function to count events in the buffer that occurred after the cutoff time
+// buf: pointer to the buffer array
+// head: head index (oldest event)
+// count: current number of events in the buffer
+// cutoff: timestamps must be >= cutoff to be counted
+int count_events_in_window(unsigned long *buf, int head, int count, unsigned long cutoff) {
+    int n = 0;
+    for (int i = 0; i < count; ++i) {
+        int idx = (head + i) % MAX_EVENT_TIMESTAMPS; // Calculate circular buffer index
+        if (buf[idx] >= cutoff) n++; // Count if timestamp is within window
+    }
+    return n;
+}
+
+/**
+ * @brief Main station management function.
+ * 
+ * This function tracks event statistics (strikes, disturbers, noise, purges) and calculates
+ * their rates per minute using a sliding window algorithm. It uses circular buffers to store
+ * timestamps of recent events for each type, allowing accurate, up-to-date rate calculations
+ * that reflect activity in the last N seconds (typically 60s).
+ * 
+ * Why circular buffers?  
+ * - They efficiently store only the most recent N event timestamps, using fixed memory.
+ * - They allow fast insertion and fast counting of events within a time window.
+ * - This enables a true "events per minute" rate that is responsive and accurate, even if
+ *   events are sparse or bursty, and avoids the inaccuracy of simple interval-based counters.
+ * 
+ * The function updates rates every 2 seconds for responsiveness, but only prints rates to the
+ * web interface every 10 seconds, and only after at least 1 minute of rate calculations has
+ * occurred (to ensure the sliding window is fully populated).
+ * 
+ * @param relayState Reference to relay state variable (not used in this function, but may be used for future power management logic)
+ * @param isr Interrupt source register value (event type)
+ */
+void station_management(bool &relayState, byte isr)
 {
+    // Static structure to hold all event counts, rates, and circular buffers
     static station_management_struct sm = {0};
-
     unsigned long now = millis();
-    if (now - sm.saved_tick >= 10000) { // 10-second interval for printing stats
-        unsigned long elapsedSeconds = (now - sm.lastRateCalcTick) / 1000;
-        if (elapsedSeconds == 0) elapsedSeconds = 1; // avoid division by zero
 
-        sm.strikeRate     = (sm.strikeCount     - sm.lastStrikeCount)     / (elapsedSeconds / 60.0f);
-        sm.disturberRate  = (sm.disturberCount  - sm.lastDisturberCount)  / (elapsedSeconds / 60.0f);
-        sm.noiseRate      = (sm.noiseCount      - sm.lastNoiseCount)      / (elapsedSeconds / 60.0f);
-        sm.purgeRate      = (sm.purgeCount      - sm.lastPurgeCount)      / (elapsedSeconds / 60.0f);
+    // --- 1. Record event timestamps in circular buffers ---
+    switch (isr) {
+        case LIGHTNING_INT:
+            sm.strikeCount++;
+            add_event_timestamp(sm.strikeTimestamps, &sm.strikeHead, &sm.strikeCountInBuf, now);
+            break;
+        case DISTURBER_INT:
+            sm.disturberCount++;
+            add_event_timestamp(sm.disturberTimestamps, &sm.disturberHead, &sm.disturberCountInBuf, now);
+            break;
+        case NOISE_INT:
+            sm.noiseCount++;
+            add_event_timestamp(sm.noiseTimestamps, &sm.noiseHead, &sm.noiseCountInBuf, now);
+            break;
+        case PASSTHRU_INT:
+            break;
+        default:
+            sm.purgeCount++;
+            add_event_timestamp(sm.purgeTimestamps, &sm.purgeHead, &sm.purgeCountInBuf, now);
+            break;
+    }
 
-        // Track max rates
+    // --- 2. Update rates every 2 seconds for responsiveness ---
+    const unsigned long RATE_WINDOW_SECONDS = 60;
+    const unsigned long RATE_UPDATE_INTERVAL_MS = 2000;
+    static unsigned long lastRateUpdate = 0;
+    static unsigned long firstRateUpdate = 0;
+    static int rateUpdateCount = 0;
+    if (now - lastRateUpdate >= RATE_UPDATE_INTERVAL_MS) {
+        unsigned long windowMillis = RATE_WINDOW_SECONDS * 1000UL;
+        unsigned long cutoff = now - windowMillis;
+
+        int strikes = count_events_in_window(sm.strikeTimestamps, sm.strikeHead, sm.strikeCountInBuf, cutoff);
+        int disturbers = count_events_in_window(sm.disturberTimestamps, sm.disturberHead, sm.disturberCountInBuf, cutoff);
+        int noises = count_events_in_window(sm.noiseTimestamps, sm.noiseHead, sm.noiseCountInBuf, cutoff);
+        int purges = count_events_in_window(sm.purgeTimestamps, sm.purgeHead, sm.purgeCountInBuf, cutoff);
+
+        float windowMinutes = (float)RATE_WINDOW_SECONDS / 60.0f;
+        sm.strikeRate = strikes / windowMinutes;
+        sm.disturberRate = disturbers / windowMinutes;
+        sm.noiseRate = noises / windowMinutes;
+        sm.purgeRate = purges / windowMinutes;
+
+        // Track max rates for each event type
         if (sm.strikeRate    > sm.maxStrikeRate)    sm.maxStrikeRate    = sm.strikeRate;
         if (sm.disturberRate > sm.maxDisturberRate) sm.maxDisturberRate = sm.disturberRate;
         if (sm.noiseRate     > sm.maxNoiseRate)     sm.maxNoiseRate     = sm.noiseRate;
         if (sm.purgeRate     > sm.maxPurgeRate)     sm.maxPurgeRate     = sm.purgeRate;
-        
-        // Print current counts and rates
+
+        if (firstRateUpdate == 0) firstRateUpdate = now;
+        rateUpdateCount++;
+        lastRateUpdate = now;
+    }
+
+    // --- 3. Print to web only every 10 seconds, but only after 1 min of rate calcs ---
+    static unsigned long lastWebPrint = 0;
+    const unsigned long WEB_PRINT_INTERVAL_MS = 10000;
+    if (now - lastWebPrint >= WEB_PRINT_INTERVAL_MS && (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL) {
         WebText(
             "\nStation Mgmt Stats: %lu strikes (%.1f/min), %lu disturbers (%.1f/min), "
-            "%lu noise events (%.1f/min), %lu purges (%.1f/min)\n", 
+            "%lu noise events (%.1f/min), %lu purges (%.1f/min)\n",
             sm.strikeCount,    sm.strikeRate,
             sm.disturberCount, sm.disturberRate,
             sm.noiseCount,     sm.noiseRate,
             sm.purgeCount,     sm.purgeRate
         );
 
-        // Print max rates separately
         WebText(
-            "Max Rates: strikes %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
+            "\tMax Rates: strikes %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
             sm.maxStrikeRate, sm.maxDisturberRate, sm.maxNoiseRate, sm.maxPurgeRate
         );
 
-        sm.lastStrikeCount     = sm.strikeCount;
-        sm.lastDisturberCount  = sm.disturberCount;
-        sm.lastNoiseCount      = sm.noiseCount;
-        sm.lastPurgeCount      = sm.purgeCount;
-        sm.lastRateCalcTick    = now;
-        sm.saved_tick          = now; // reset the tick count for next interval.
+        lastWebPrint = now;
     }
-
-    switch (isr) {
-        case LIGHTNING_INT:
-            sm.strikeCount++;
-            break;
-        case DISTURBER_INT:
-            sm.disturberCount++;
-            break;
-        case NOISE_INT:
-            sm.noiseCount++;
-            break;
-        case PASSTHRU_INT:
-            break;   
-        default:
-            sm.purgeCount++;
-            break;
-    }
-} 
+}
 
 // manage the tft power field display by reading the RELAY_SENSE_STATE GPIO pin, encapsulate it here if how we do so changes.
 void manage_tft_power_field()
