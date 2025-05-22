@@ -78,12 +78,12 @@ try to remember to bump this each time a functional mod is done
 16-May-2025 w9zv    v4.22   fixed bug in distance calculation, added handling of storm overhead and out of range, accidentally overwrote
                             the distance with fake_distance value.  added handling of storm overhead and out of range to the web page.  webpage now shows
                             floating point distance to storm. 
-
+21-May-2025 w9zv    v4.30   added tracking of max rate of events in station_management.
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v4.22";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v4.3";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -542,7 +542,8 @@ void loop2(HostCmdEnum & host_command)
         }
     }
 
-//  if ( gEvents_Active_Flag == true && (digitalRead(DetectorIntrReqPin) == HIGH || faked_event != PASSTHRU_INT) ) {
+    // if im handling events, and the AS3935 has generated an interrupt via GPIO, or we are in simulator mode, then handle the event.
+    //    there is a CLI command it deactiveate handling events (for manual testing of tuning) 
     if ( gEvents_Active_Flag == true && (digitalRead(DetectorIntrReqPin) == HIGH || gSimulated_Events) ) {
         
         // according to spec sheet, we need to wait 2ms before reading the interrupt source register
@@ -742,62 +743,91 @@ void loop2(HostCmdEnum & host_command)
     host_command = HostCmdEnum::NO_OP;
 }
 
+struct station_management_struct {
+    unsigned long strikeCount;
+    unsigned long disturberCount;
+    unsigned long noiseCount;
+    unsigned long purgeCount;
+
+    unsigned long lastStrikeCount;
+    unsigned long lastDisturberCount;
+    unsigned long lastNoiseCount;
+    unsigned long lastPurgeCount;
+
+    unsigned long lastRateCalcTick;
+    unsigned long saved_tick; // grab the tick count after reset
+
+    float strikeRate;
+    float disturberRate;
+    float noiseRate;
+    float purgeRate;
+
+    float maxStrikeRate;
+    float maxDisturberRate;
+    float maxNoiseRate;
+    float maxPurgeRate;
+};
 // perform algorithm to determine if we need to turn the power on or off, based on tbd criteria.
 //   the value of the interruptSourceRegister is the value read from the interrupt source register of the AS3935 device
 // so you can do stats based on strikes/noise/disturbers, etc WITHOUT actually reading the ISR again.
 void station_management (bool &relayState, byte isr ) 
 {
-    static unsigned long strikeCount = 0; // static so we can keep track of the number of strikes
-    static unsigned long disturberCount = 0; // static so we can keep track of the number of disturbers 
-    static unsigned long noiseCount = 0; // static so we can keep track of the number of noise events
-    static unsigned long purgeCount = 0; // static so we can keep track of the number of purges 
-
-    static unsigned long lastStrikeCount = 0;
-    static unsigned long lastDisturberCount = 0;
-    static unsigned long lastNoiseCount = 0;
-    static unsigned long lastPurgeCount = 0;
-
-    static unsigned long lastRateCalcTick = millis();
-    static unsigned long saved_tick = millis(); // grab the tick count after reset
+    static station_management_struct sm = {0};
 
     unsigned long now = millis();
-    if (now - saved_tick >= 10000) { // 10-second interval for printing stats
-        unsigned long elapsedSeconds = (now - lastRateCalcTick) / 1000;
-        float strikeRate = (strikeCount - lastStrikeCount) / (elapsedSeconds / 60.0);
-        float disturberRate = (disturberCount - lastDisturberCount) / (elapsedSeconds / 60.0);
-        float noiseRate = (noiseCount - lastNoiseCount) / (elapsedSeconds / 60.0);
-        float purgeRate = (purgeCount - lastPurgeCount) / (elapsedSeconds / 60.0);
+    if (now - sm.saved_tick >= 10000) { // 10-second interval for printing stats
+        unsigned long elapsedSeconds = (now - sm.lastRateCalcTick) / 1000;
+        if (elapsedSeconds == 0) elapsedSeconds = 1; // avoid division by zero
 
-        WebText("\nStation Mgmt Stats: %lu strikes (%.1f/min), %lu disturbers (%.1f/min), %lu noise events (%.1f/min), %lu purges (%.1f/min)\n", 
-                      strikeCount, strikeRate, disturberCount, disturberRate, noiseCount, noiseRate, purgeCount, purgeRate);
+        sm.strikeRate     = (sm.strikeCount     - sm.lastStrikeCount)     / (elapsedSeconds / 60.0f);
+        sm.disturberRate  = (sm.disturberCount  - sm.lastDisturberCount)  / (elapsedSeconds / 60.0f);
+        sm.noiseRate      = (sm.noiseCount      - sm.lastNoiseCount)      / (elapsedSeconds / 60.0f);
+        sm.purgeRate      = (sm.purgeCount      - sm.lastPurgeCount)      / (elapsedSeconds / 60.0f);
 
-        lastStrikeCount = strikeCount;
-        lastDisturberCount = disturberCount;
-        lastNoiseCount = noiseCount;
-        lastPurgeCount = purgeCount;
-        lastRateCalcTick = now;
-        saved_tick = now; // reset the tick count for next interval.
+        // Track max rates
+        if (sm.strikeRate    > sm.maxStrikeRate)    sm.maxStrikeRate    = sm.strikeRate;
+        if (sm.disturberRate > sm.maxDisturberRate) sm.maxDisturberRate = sm.disturberRate;
+        if (sm.noiseRate     > sm.maxNoiseRate)     sm.maxNoiseRate     = sm.noiseRate;
+        if (sm.purgeRate     > sm.maxPurgeRate)     sm.maxPurgeRate     = sm.purgeRate;
+        
+        // Print current counts and rates
+        WebText(
+            "\nStation Mgmt Stats: %lu strikes (%.1f/min), %lu disturbers (%.1f/min), "
+            "%lu noise events (%.1f/min), %lu purges (%.1f/min)\n", 
+            sm.strikeCount,    sm.strikeRate,
+            sm.disturberCount, sm.disturberRate,
+            sm.noiseCount,     sm.noiseRate,
+            sm.purgeCount,     sm.purgeRate
+        );
+
+        // Print max rates separately
+        WebText(
+            "Max Rates: strikes %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
+            sm.maxStrikeRate, sm.maxDisturberRate, sm.maxNoiseRate, sm.maxPurgeRate
+        );
+
+        sm.lastStrikeCount     = sm.strikeCount;
+        sm.lastDisturberCount  = sm.disturberCount;
+        sm.lastNoiseCount      = sm.noiseCount;
+        sm.lastPurgeCount      = sm.purgeCount;
+        sm.lastRateCalcTick    = now;
+        sm.saved_tick          = now; // reset the tick count for next interval.
     }
 
     switch (isr) {
         case LIGHTNING_INT:
-            strikeCount++;
-            //power_relay_control(false);
+            sm.strikeCount++;
             break;
-
         case DISTURBER_INT:
-            disturberCount++;
+            sm.disturberCount++;
             break;
-
         case NOISE_INT:
-            noiseCount++;
+            sm.noiseCount++;
             break;
-
         case PASSTHRU_INT:
             break;   
-
         default:
-            purgeCount++;
+            sm.purgeCount++;
             break;
     }
 } 
@@ -1024,7 +1054,7 @@ void handle_THRESH_Command(char* param)
     // This setting will change when the lightning detector issues an interrupt.
     // instead of one. Register is a 2 bit field, therefore values of 0-0x3, corresponding strike count of 
     //  of 1, 5, 9 and 16 respectively are accepted.
-    // Followed by its corresponding read function. Default value is zero (interrupt on one strike).
+    // Followed by its corresponding read function. Default value is zero (interrupt on one stroke).
     if (param != NULL) {
         long regval = cp.parseParameter(param);
         // only allow values of 1,5,9,16 per datasheet
