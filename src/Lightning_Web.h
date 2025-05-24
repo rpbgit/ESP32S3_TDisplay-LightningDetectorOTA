@@ -164,20 +164,22 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
 
     .myDiv1 {
         border-radius: 3px;
-        max-width: 807px;
+        /* max-width: 807px; */
         margin: auto;
         border: 3px solid rgb(84, 230, 71);
         background-color: rgba(27, 27, 27, 0.473);
         /* text-align: center; */
         /* padding: 3px 5px; */
+    padding:2px;
     }
 
     .termta {
         border-radius: 3px;
+    width:100%;
         /* max-width: 800px; */
-        max-width: 99%;
+    max-width: 100%;
         max-height: 99%;
-        margin: auto;
+        /* margin: auto; */
         background-color: rgba(48, 49, 48, 0.473);
         color: cyan;
         box-sizing: border-box;

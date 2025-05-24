@@ -1,59 +1,3 @@
-/*
-  OK, ya ready for some fun? HTML + CSS styling + javascript all in and undebuggable environment
-
-  one trick I've learned to how to debug HTML and CSS code.
-
-  get all your HTML code (from html to /html) and past it into this test site
-  muck with the HTML and CSS code until it's what you want
-  https://www.w3schools.com/html/tryit.asp?filename=tryhtml_intro
-
-  No clue how to debug javascrip other that write, compile, upload, refresh, guess, repeat
-
-  I'm using class designators to set styles and id's for data updating
-  for example:
-  the CSS class .tabledata defines with the cell will look like
-  <td><div class="tabledata" id = "switch"></div></td>
-
-  the XML code will update the data where id = "switch"
-  java script then uses getElementById
-  document.getElementById("switch").innerHTML="Switch is OFF";
-
-
-  .. now you can have the class define the look AND the class update the content, but you will then need
-  a class for every data field that must be updated, here's what that will look like
-  <td><div class="switch"></div></td>
-
-  the XML code will update the data where class = "switch"
-  java script then uses getElementsByClassName
-  document.getElementsByClassName("switch")[0].style.color=text_color;
-
-
-  the main general sections of a web page are the following and used here
-
-  <html>
-    <style>
-    // dump CSS style stuff in here
-    </style>
-    <body>
-      <header>
-      // put header code for cute banners here
-      </header>
-      <main>
-      // the buld of your web page contents
-      </main>
-      <footer>
-      // put cute footer (c) 2021 xyz inc type thing
-      </footer>
-    </body>
-    <script>
-    // you java code between these tags
-    </script>
-  </html>
-
-
-*/
-
-
 <!DOCTYPE html>
 <html lang="en" class="js-focus-visible">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -161,20 +105,22 @@
 
     .myDiv1 {
         border-radius: 3px;
-        max-width: 807px;
+        /* max-width: 807px; */
         margin: auto;
         border: 3px solid rgb(84, 230, 71);
         background-color: rgba(27, 27, 27, 0.473);
         /* text-align: center; */
         /* padding: 3px 5px; */
+    padding:2px;
     }
 
     .termta {
         border-radius: 3px;
+    width:100%;
         /* max-width: 800px; */
-        max-width: 99%;
+    max-width: 100%;
         max-height: 99%;
-        margin: auto;
+        /* margin: auto; */
         background-color: rgba(48, 49, 48, 0.473);
         color: cyan;
         box-sizing: border-box;
