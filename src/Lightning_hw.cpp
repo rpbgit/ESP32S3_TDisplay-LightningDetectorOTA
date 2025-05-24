@@ -897,7 +897,10 @@ void station_management(bool &relayState, byte isr)
     // --- 3. Print to web only every 10 seconds, but only after 1 min of rate calcs ---
     static unsigned long lastWebPrint = 0;
     const unsigned long WEB_PRINT_INTERVAL_MS = 10000;
-    if (now - lastWebPrint >= WEB_PRINT_INTERVAL_MS && (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL) {
+
+    bool anyRateNonZero = (sm.strikeRate != 0.0f) || (sm.disturberRate != 0.0f) || (sm.noiseRate != 0.0f) || (sm.purgeRate != 0.0f);
+    // only print if at least one rate is non-zero and we have been running for at least 1 minute
+    if (now - lastWebPrint >= WEB_PRINT_INTERVAL_MS && (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL && anyRateNonZero) {
         WebText(
             "\nStation Mgmt Stats: %lu strikes (%.1f/min), %lu disturbers (%.1f/min), "
             "%lu noise events (%.1f/min), %lu purges (%.1f/min)\n",
