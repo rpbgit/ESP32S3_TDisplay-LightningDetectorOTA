@@ -409,7 +409,7 @@ void setup2()
 
     // "Disturbers" are events that are false lightning events. If you find
     // yourself seeing a lot of disturbers you can have the chip not report those
-    // events on the interrupt lines.
+    // events on the interrupt lines.   Default is not to mask them.
     Sensor.writeMaskDisturbers(false);
 
     int maskVal = Sensor.readMaskDisturbers();
@@ -420,9 +420,9 @@ void setup2()
         Serial.printf("NO\n");
 
     // The lightning detector defaults to an indoor setting (less
-    // gain/sensitivity), if you plan on using this outdoors
+    // gain/sensitivity), if you plan on using this outdoors Default is INDOORS
     // uncomment the following line:
-    Sensor.writeAFE(AS3935MI::AS3935_OUTDOORS);
+    Sensor.writeAFE(AS3935MI::AS3935_INDOORS);
 
     int enviVal = Sensor.readAFE();
     Serial.printf("Are we set for indoor or outdoor: ");
@@ -435,27 +435,27 @@ void setup2()
 
     // Noise floor setting from 1-7, one being the lowest. Default setting is
     // two. If you need to check the setting, the corresponding function for
-    // reading the function follows.
+    // reading the function follows.  Device default is 2 (NFL_2), which is the
     Sensor.writeNoiseFloorThreshold(AS3935MI::AS3935_NFL_2);
 
     int noiseVal = Sensor.readNoiseFloorThreshold();
     Serial.printf("Noise Level is set at: %#04x\n", noiseVal);
 
     // Watchdog threshold setting can be from 1-10, one being the lowest. Default setting is
-    // two. If you need to check the setting, the corresponding function for
+    // 2. If you need to check the setting, the corresponding function for
     // reading the function follows.
-    Sensor.writeWatchdogThreshold(AS3935MI::AS3935_WDTH_1);
+    Sensor.writeWatchdogThreshold(AS3935MI::AS3935_WDTH_2);
 
     int watchDogVal = Sensor.readWatchdogThreshold();
     Serial.printf("Watchdog Threshold is set to: %#04x\n", watchDogVal);
 
     // Spike Rejection setting from 1-11, one being the lowest. Default setting is
-    // two. If you need to check the setting, the corresponding function for
+    // 2. If you need to check the setting, the corresponding function for
     // reading the function follows.
     // The shape of the spike is analyzed during the chip's
     // validation routine. You can round this spike at the cost of sensitivity to
     // distant events.
-    Sensor.writeSpikeRejection(AS3935MI::AS3935_SREJ_1);
+    Sensor.writeSpikeRejection(AS3935MI::AS3935_SREJ_2);
 
     int spikeVal = Sensor.readSpikeRejection();
     Serial.printf("Spike Rejection is set to:  %#04x\n", spikeVal);
@@ -744,8 +744,6 @@ void loop2(HostCmdEnum & host_command)
     host_command = HostCmdEnum::NO_OP;
 }
 
-
-
 // Main station management function
 // relayState: reference to relay state variable
 // isr: interrupt source register value (event type)
@@ -896,26 +894,40 @@ void station_management(bool &relayState, byte isr)
 
     // --- 3. Print to web only every 10 seconds, but only after 1 min of rate calcs ---
     static unsigned long lastWebPrint = 0;
-    const unsigned long WEB_PRINT_INTERVAL_MS = 10000;
+    const unsigned long WEB_PRINT_INTERVAL_MS = 10000; // 10 seconds
+    static bool wasAnyRateNonZero = false;
 
     bool anyRateNonZero = (sm.strikeRate != 0.0f) || (sm.disturberRate != 0.0f) || (sm.noiseRate != 0.0f) || (sm.purgeRate != 0.0f);
-    // only print if at least one rate is non-zero and we have been running for at least 1 minute
-    if (now - lastWebPrint >= WEB_PRINT_INTERVAL_MS && (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL && anyRateNonZero) {
-        WebText(
-            "\nStation Mgmt Stats: %lu strikes (%.1f/min), %lu disturbers (%.1f/min), "
-            "%lu noise events (%.1f/min), %lu purges (%.1f/min)\n",
-            sm.strikeCount,    sm.strikeRate,
-            sm.disturberCount, sm.disturberRate,
-            sm.noiseCount,     sm.noiseRate,
-            sm.purgeCount,     sm.purgeRate
-        );
 
-        WebText(
-            "\tMax Rates: strikes %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
-            sm.maxStrikeRate, sm.maxDisturberRate, sm.maxNoiseRate, sm.maxPurgeRate
-        );
+    // Print if any rate is non-zero, or if rates just transitioned to zero
+    if (now - lastWebPrint >= WEB_PRINT_INTERVAL_MS &&
+        (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL &&
+        (anyRateNonZero || wasAnyRateNonZero)) {
+
+        if (anyRateNonZero) {
+            WebText(
+                "SM Rates: strike (%.1f/min), disturber (%.1f/min), noise (%.1f/min), purge (%.1f/min)\n",
+                sm.strikeRate, sm.disturberRate, sm.noiseRate, sm.purgeRate
+            );
+            // WebText(
+            //     "SMgmt Stats: %lu strikes (%.1f/min), %lu disturbers (%.1f/min), "
+            //     "%lu noise events (%.1f/min), %lu purges (%.1f/min)\n",
+            //     sm.strikeCount,    sm.strikeRate,
+            //     sm.disturberCount, sm.disturberRate,
+            //     sm.noiseCount,     sm.noiseRate,
+            //     sm.purgeCount,     sm.purgeRate
+            // );
+
+            // WebText(
+            //     "\tMax Rates: strikes %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
+            //     sm.maxStrikeRate, sm.maxDisturberRate, sm.maxNoiseRate, sm.maxPurgeRate
+            // );
+        } else if (wasAnyRateNonZero) {
+            WebText("Station Mgmt Stats: All rates are now zero.\n");
+        }
 
         lastWebPrint = now;
+        wasAnyRateNonZero = anyRateNonZero;
     }
 }
 
