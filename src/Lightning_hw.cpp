@@ -81,11 +81,13 @@ try to remember to bump this each time a functional mod is done
 21-May-2025 w9zv    v4.31   added tracking of max rate of events in station_management. refactor station_management: implement circular buffers for event 
                             timestamps and improve rate calculations
 26-May-2025 w9zv    v4.32   changed setup2() to ensure factory defaults for all config registers for AS3935 device are set.
+28-May-2025 w9zv    v4.4    modified station_management rate data printing. track max rates, webtext on rate change. added add'l dummy values to aid 
+                                detection for charting.
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v4.32";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v4.4";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -896,18 +898,28 @@ void station_management(bool &relayState, byte isr)
     // --- 3. Print to web only every 10 seconds, but only after 1 min of rate calcs ---
     static unsigned long lastWebPrint = 0;
     const unsigned long WEB_PRINT_INTERVAL_MS = 10000; // 10 seconds
-    static bool wasAnyRateNonZero = false;
 
     bool anyRateNonZero = (sm.strikeRate != 0.0f) || (sm.disturberRate != 0.0f) || (sm.noiseRate != 0.0f) || (sm.purgeRate != 0.0f);
 
-    // Print if any rate is non-zero, or if rates just transitioned to zero
-    if (now - lastWebPrint >= WEB_PRINT_INTERVAL_MS &&
-        (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL &&
-        (anyRateNonZero || wasAnyRateNonZero)) {
+    // Store summation of previous rates to detect changes
+    static float prevStrikeRate = -1.0f, prevDisturberRate = -1.0f, prevNoiseRate = -1.0f, prevPurgeRate = -1.0f;
+    
+    // Check if rates have changed since last print
+    bool ratesChanged =
+        (sm.strikeRate    != prevStrikeRate)    ||
+        (sm.disturberRate != prevDisturberRate) ||
+        (sm.noiseRate     != prevNoiseRate)     ||
+        (sm.purgeRate     != prevPurgeRate);
 
-        if (anyRateNonZero) {
+    // Print if any rate is non-zero, or if rates just transitioned to zero
+    // if (now - lastWebPrint >= WEB_PRINT_INTERVAL_MS &&              // print every 10 seconds and
+    //     (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL && // after at least 1 minute of rate calculations
+    //     (anyRateNonZero || wasAnyRateNonZero)) {    
+
+    if (ratesChanged && (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL ) {
+        if(anyRateNonZero) {
             WebText(
-                "SM Rates: strike (%.1f/min), disturber (%.1f/min), noise (%.1f/min), purge (%.1f/min)\n",
+                "SM Rates: strike (%.1f/min), disturber (%.1f/min), noise (%.1f/min), purge (%.1f/min) 7, 7, 7, 7,\n",
                 sm.strikeRate, sm.disturberRate, sm.noiseRate, sm.purgeRate
             );
             // WebText(
@@ -918,18 +930,18 @@ void station_management(bool &relayState, byte isr)
             //     sm.noiseCount,     sm.noiseRate,
             //     sm.purgeCount,     sm.purgeRate
             // );
-
-            // WebText(
-            //     "\tMax Rates: strikes %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
-            //     sm.maxStrikeRate, sm.maxDisturberRate, sm.maxNoiseRate, sm.maxPurgeRate
-            // );
-        } else if (wasAnyRateNonZero) {
-            WebText("Station Mgmt Stats: All rates are now zero.\n");
-        }
-
-        lastWebPrint = now;
-        wasAnyRateNonZero = anyRateNonZero;
+        } else 
+            WebText("SM Rates are now zero.\n");
+        
+        WebText( "\tMax Rate: strike %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
+                    sm.maxStrikeRate, sm.maxDisturberRate, sm.maxNoiseRate, sm.maxPurgeRate );
     }
+    // Update previous rates to detect change
+    prevStrikeRate     = sm.strikeRate;
+    prevDisturberRate  = sm.disturberRate;
+    prevNoiseRate      = sm.noiseRate;
+    prevPurgeRate      = sm.purgeRate;
+
 }
 
 // manage the tft power field display by reading the RELAY_SENSE_STATE GPIO pin, encapsulate it here if how we do so changes.
