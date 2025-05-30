@@ -931,7 +931,7 @@ void station_management(bool &relayState, byte isr)
             //     sm.purgeCount,     sm.purgeRate
             // );
         } else 
-            WebText("SM Rates are now zero.\n");
+            WebText("SM Rates are now zero. 0 0 0 0 0 0 0 0 \n");
         
         WebText( "\tMax Rate: strike %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
                     sm.maxStrikeRate, sm.maxDisturberRate, sm.maxNoiseRate, sm.maxPurgeRate );

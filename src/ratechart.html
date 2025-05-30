@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!-- Page title shown in browser tab -->
+  <title>Smooth Scrolling Real-Time Chart</title>
+  <!-- Load Chart.js library from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* Set dark background and light text for the whole page */
+    body {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      margin: 0;
+      padding: 0;
+    }
+    /* Style the chart container with border, shadow, and spacing */
+    .chart-container {
+      width: calc(100vw - 32px);   /* 16px gap on each side of window */
+      height: 90vh;                /* 90% of viewport height */
+      border: 2px solid #333;      /* Subtle border */
+      border-radius: 16px;         /* Rounded corners */
+      box-sizing: border-box;      /* Include border/padding in width/height */
+      box-shadow: 0 4px 24px #000a;/* Soft shadow for depth */
+      background: #1e1e1e;         /* Match VS Code dark+ background */
+      display: flex;               /* Center chart horizontally/vertically */
+      justify-content: center;
+      align-items: center;
+      padding-left: 8px;           /* Small left padding */
+      padding-right: 8px;          /* Small right padding */
+      padding-top: 0;
+      padding-bottom: 0;
+      overflow: hidden;            /* Prevent scrollbars */
+      margin: 16px auto;           /* 16px above and below the container */
+    }
+    /* Make the chart canvas fill the container */
+    #myChart {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+      background: #1e1e1e;
+    }
+  </style>
+</head>
+<body>
+  <!-- Chart container holds the canvas for Chart.js -->
+  <div class="chart-container">
+    <canvas id="myChart"></canvas>
+  </div>
+  <script>
+    // --- DATA INITIALIZATION ---
+
+    // Initial x-axis labels (time points)
+    let xLabels = [0, 1, 2, 3];
+
+    // Initial data for 4 traces (each array is a trace)
+    let dataValues = [
+      [0, 0, 0, 0], // Trace 1: Strikes
+      [0, 0, 0, 0], // Trace 2: Disturbers
+      [0, 0, 0, 0], // Trace 3: Noise
+      [0, 0, 0, 0]   // Trace 4: Purges
+    ];
+
+    // let dataValues = [
+    //   [10, 20, 15, 25], // Trace 1: Strikes
+    //   [15, 10, 20, 18], // Trace 2: Disturbers
+    //   [22, 18, 12, 20], // Trace 3: Noise
+    //   [8, 12, 18, 10]   // Trace 4: Purges
+    // ];
+
+    // Counter for generating new time points
+    let counter = 4;
+
+    // Accent colors for each trace (VS Code Dark+ theme)
+    const colors = [
+      '#569CD6', // blue
+      '#D7BA7D', // yellow
+      '#C586C0', // purple
+      '#9CDCFE'  // cyan
+    ];
+
+    // Human-friendly names for each trace
+    const traceNames = ['Strike', 'Disturber', 'Noise', 'Purge'];
+
+    // --- CHART INITIALIZATION ---
+
+    // Get the 2D drawing context from the canvas
+    const ctx = document.getElementById('myChart').getContext('2d');
+
+    // Create the Chart.js line chart
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: xLabels, // Initial x-axis labels
+        datasets: dataValues.map((arr, i) => ({
+          label: traceNames[i],                  // Name for legend and tooltips
+          data: arr,                             // Initial data for this trace
+          borderColor: colors[i],                // Line color
+          backgroundColor: colors[i] + '33',     // 20% opacity fill under line
+          cubicInterpolationMode: 'default',     // Smoother lines (can use 'monotone')
+          tension: 0.1                           // Line tension for smoothness
+        }))
+      },
+      options: {
+        responsive: true,                        // Chart resizes with container
+        maintainAspectRatio: false,              // Fill container height/width
+        plugins: {
+          legend: {
+            labels: {
+              color: '#d4d4d4',                 // Legend text color
+              
+              // Custom label generation to show latest value in legend, comment out if not needed
+              generateLabels: function(chart) {
+                // Get the default labels
+                const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                // For each dataset, append the latest value to the label
+                return original.map((label, i) => {
+                  // Get the latest value for this dataset (leftmost, since you unshift)
+                  const dataArr = chart.data.datasets[i].data;
+                  const latest = dataArr.length > 0 ? dataArr[0] : '';
+                  return {
+                    ...label,
+                    text: `${chart.data.datasets[i].label}: ${latest}`
+                  };
+                });
+              }
+            }
+          },
+          title: {
+            display: true,                       // Show chart title
+            text: 'Sliding Window Event Rates',  // Title text
+            color: '#d4d4d4',                    // Title color
+            font: {
+              size: 20,
+              weight: 'bold'
+            },
+            padding: { top: 10, bottom: 20 }     // Space above/below title
+          }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Time (min)', color: '#d4d4d4' }, // X axis label
+            min: 0,                  // Start at 0 (fixed after 60 points)
+            max: 59,                 // End at 59 (fixed after 60 points)
+            ticks: {
+              color: '#d4d4d4',      // Tick label color
+              callback: function(value, index, ticks) {
+                // Always show 0-59, left to right
+                return index;
+              }
+            },
+            grid: {
+              color: 'rgba(136,136,136,0.49)',      // Dimmed grid lines (49% opacity)
+              lineWidth: 1,
+              drawBorder: true,
+              borderColor: 'rgba(255,255,255,0.49)', // Dimmed axis line
+              borderWidth: 2
+            }
+          },
+          y: {
+            title: { display: true, text: 'Rate/min', color: '#d4d4d4' }, // Y axis label
+            min: 0,                // Start y-axis at 0
+            max: 10,               // Start y-axis at 10 (will autoscale later)
+            ticks: { color: '#d4d4d4' },                                  // Tick label color
+            grid: {
+              color: 'rgba(136,136,136,0.49)',      // Dimmed grid lines (49% opacity)
+              lineWidth: 1,
+              drawBorder: true,
+              borderColor: 'rgba(255,255,255,0.49)', // Dimmed axis line
+              borderWidth: 2
+            }
+          }
+        }
+      }
+    });
+
+    // --- REAL-TIME DATA SIMULATION AND SLIDING WINDOW LOGIC ---
+
+    setInterval(() => {
+      // For each trace, add a new random data point at the start (newest on the left)
+      for (let i = 0; i < dataValues.length; i++) {
+        let newValue = Math.floor(Math.random() * 30) + 5; // Random value between 5 and 34
+        dataValues[i].unshift(newValue);                   // Insert at the beginning
+        if (dataValues[i].length > 60)                     // Keep only the latest 60 points
+          dataValues[i] = dataValues[i].slice(0, 60);
+      }
+
+      // Add new time label at the start (for autoscaling phase)
+      xLabels.unshift(counter);
+      if (xLabels.length > 60) xLabels = xLabels.slice(0, 60);
+      counter++;
+
+      if (xLabels.length < 60) {
+        // For the first 60 points, autoscale x-axis and use actual labels
+        chart.data.labels = xLabels;
+        chart.options.scales.x.min = undefined;
+        chart.options.scales.x.max = undefined;
+      } else {
+        // After 60 points, fix x-axis to 0-59 and use a constant label window
+        chart.data.labels = Array.from({length: 60}, (_, i) => i);
+        chart.options.scales.x.min = 0;
+        chart.options.scales.x.max = 59;
+      }
+
+      // --- AUTOSCALE Y AXIS AFTER INITIALIZATION ---
+      if (xLabels.length > 1) {
+        chart.options.scales.y.min = undefined;
+        chart.options.scales.y.max = undefined;
+      }
+
+      // Update each dataset with the latest data
+      for (let i = 0; i < dataValues.length; i++) {
+        chart.data.datasets[i].data = dataValues[i];
+      }
+
+      chart.update(); // Redraw the chart with new data
+
+      // Optional: Auto-scroll to the start (left) for smooth effect
+      const container = document.querySelector('.chart-container');
+      container.scrollLeft = 0;
+    }, 1000); // Update every 2000 ms (2 seconds, simulating 1 minute per tick)
+  </script>
+</body>
+</html>
