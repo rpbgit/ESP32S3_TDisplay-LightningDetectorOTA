@@ -1,0 +1,18 @@
+<!-- 
+  dummy xml data for client to fetch for testing, file must not have a filename extension or 
+    you have to change the request
+ -->
+ <root>
+  <INFO>Test info from five-server xml file</INFO>
+  <PWR>1</PWR>
+  <NOISE_ACC>12</NOISE_ACC>
+  <NOISE_ET>34</NOISE_ET>
+  <DISTURB_ACC>56</DISTURB_ACC>
+  <DISTURB_ET>78</DISTURB_ET>
+  <STRIKE_ACC>90</STRIKE_ACC>
+  <STRIKE_ET>12</STRIKE_ET>
+  <STRIKE_DIST>3</STRIKE_DIST>
+  <STRIKE_ENER>7</STRIKE_ENER>
+  <VER>1.0.0</VER>
+  <RATES>1,2,3,4</RATES>
+</root>

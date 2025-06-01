@@ -290,24 +290,6 @@
         xhttp.send();
     }
 
-    // handler for a selection made of one of the two buttons in the Aux1 button group
-    function Aux1GrpButtonPress(value) {
-        console.log("Aux1 " + value);
-        document.getElementById(value).style.backgroundColor = "#ffff00";
-        var xhttp = new XMLHttpRequest();
-        xhttp.open("PUT", value, true); // send name of Aux1 button selected to server
-        xhttp.send();
-    }
-
-    // handler for a selection made of one of the two buttons in the Aux2 button group
-    function Aux2GrpButtonPress(value) {
-        console.log("Aux2 " + value);
-        document.getElementById(value).style.backgroundColor = "#ffff00";
-        var xhttp = new XMLHttpRequest();
-        xhttp.open("PUT", value, true); // send name of Aux2 button selected to server
-        xhttp.send();
-    }
-
     function AllGndPress(value) {
         console.log("AllGndPress " + value);
         document.getElementById("ALL_GND").style.backgroundColor = "#ffff00";
@@ -403,6 +385,9 @@
             message = xmldoc[0].firstChild.nodeValue;
             document.getElementById("headerTitle").textContent = "ESP32 Storm detector " + message;
         }
+
+        // Update chart data from <RATES> XML tag
+        updateChartFromRatesXML(xmlResponse);
     }
     
     function getVolume() {
@@ -460,7 +445,7 @@
             xmlHttp.onreadystatechange = response;
             xmlHttp.send(null);
         }
-        setTimeout("process()", 500);
+        //setTimeout("process()", 500); // Poll every 2 seconds
     }
 
     // --- Chart.js initialization (add your chart logic here) ---
@@ -468,10 +453,10 @@
     // --- DATA INITIALIZATION ---
 
     // Initial x-axis labels (time points)
-    var xLabels = [0, 1, 2, 3];
+    let xLabels = [0, 1, 2, 3];
 
     // Initial data for 4 traces (each array is a trace)
-    var dataValues = [
+    let dataValues = [
       [0, 0, 0, 0], // Trace 1: Strikes
       [0, 0, 0, 0], // Trace 2: Disturbers
       [0, 0, 0, 0], // Trace 3: Noise
@@ -584,19 +569,21 @@
           }
         } // <-- closes options
       }); // <-- closes new Chart
-console.log('myChart:', window.myChart);
-console.log('xLabels:', xLabels);
-      //updateChartSimulatedData(); // <-- call here, after chart is created
-      setInterval(updateChartSimulatedData, 2000);
+// console.log('myChart:', window.myChart);
+// console.log('xLabels:', xLabels);
+      // updateChartSimulatedData(); // <-- call here, after chart is created
+      // setInterval(updateChartSimulatedData, 2000);
     }); // <-- closes DOMContentLoaded
 
 
     // --- REAL-TIME DATA SIMULATION AND SLIDING WINDOW LOGIC ---
 
     function updateChartSimulatedData() {
+      if (!window.myChart) return; // If chart not initialized, exit
       // For each trace, add a new random data point at the start (newest on the left)
       for (let i = 0; i < dataValues.length; i++) {
         let newValue = Math.floor(Math.random() * 12) + 0; // Random value between 5 and 34
+        //let newValue = 4;
         dataValues[i].unshift(newValue);                   // Insert at the beginning
         if (dataValues[i].length > 60)                     // Keep only the latest 60 points
           dataValues[i] = dataValues[i].slice(0, 60);
@@ -608,39 +595,104 @@ console.log('xLabels:', xLabels);
       counter++;
 
       if (xLabels.length < 60) {
-// console.log('myChart:', window.myChart);
-// console.log('xLabels:', xLabels);
-        window.myChart.data.labels = xLabels;
-        window.myChart.options.scales.x.min = undefined;
-        window.myChart.options.scales.x.max = undefined;
+        // If fewer than 60 points, let Chart.js autoscale the x-axis
+        window.myChart.data.labels = xLabels; // Use the current labels array for the x-axis
+        window.myChart.options.scales.x.min = undefined; // Remove fixed min so Chart.js can autoscale
+        window.myChart.options.scales.x.max = undefined; // Remove fixed max so Chart.js can autoscale
       } else {
-        window.myChart.data.labels = Array.from({length: 60}, (_, i) => i);
-        window.myChart.options.scales.x.min = 0;
-        window.myChart.options.scales.x.max = 59;
+        // Once we have 60 or more points, fix the x-axis range to always show 0-59
+        window.myChart.data.labels = Array.from({length: 60}, (_, i) => i); // Set labels to 0-59
+        window.myChart.options.scales.x.min = 0; // Fix the minimum x value
+        window.myChart.options.scales.x.max = 59; // Fix the maximum x value
       }
 
       // --- AUTOSCALE Y AXIS AFTER INITIALIZATION ---
       if (xLabels.length > 1) {
+        // Let Chart.js autoscale the y-axis based on the data
         window.myChart.options.scales.y.min = undefined;
         window.myChart.options.scales.y.max = undefined;
       }
 
       // Update each dataset with the latest data
       for (let i = 0; i < dataValues.length; i++) {
+        window.myChart.data.datasets[i].data = dataValues[i]; // Update the chart's data for each trace
+      }
+
+      window.myChart.update('none'); // Redraw the chart with new data, none eliminates animation
+      //window.myChart.update(); // Redraw the chart with new data, none eliminates animation
+
+      // Optional: Auto-scroll to the start (left) for smooth effect
+      const container = document.querySelector('.chart-container'); // Get the chart container element
+      container.scrollLeft = 0; // Scroll to the leftmost position
+    }
+
+    // // Call once immediately
+    // updateChartSimulatedData();
+
+    // // Then call every 1000ms
+    setInterval(updateChartSimulatedData, 1000);
+
+    // Updates the chart with new data from the <RATES> XML tag.
+    // Call this from your response() function after receiving new XML data.
+    function updateChartFromRatesXML(xmlResponse) {
+      if (!window.myChart) return; // If chart not initialized, exit
+
+      // Extract the <RATES> tag from the XML response
+      const ratesTag = xmlResponse.getElementsByTagName("RATES");
+      if (!ratesTag || ratesTag.length === 0) return; // If no <RATES> tag found, exit
+
+      // Get the comma-separated string of rates from the tag
+      // Use textContent if available, otherwise fallback to firstChild.nodeValue
+      const ratesString = ratesTag[0].textContent || ratesTag[0].firstChild.nodeValue;
+      if (!ratesString) return; // If the tag is empty, exit
+
+      // Split the string into an array of numbers (assumes CSV format)
+      const rateValues = ratesString.split(',').map(Number);
+
+      // For each trace (Strike, Disturber, Noise, Purge):
+      for (let i = 0; i < dataValues.length; i++) {
+        // Add the new value to the start of the trace's data array
+        // If a value is missing, use 0 as a fallback
+        dataValues[i].unshift(rateValues[i] || 0);
+
+        // Keep only the latest 60 points for each trace
+        if (dataValues[i].length > 60) dataValues[i].pop();
+
+        // Update the chart's dataset with the new data array
         window.myChart.data.datasets[i].data = dataValues[i];
       }
 
-      window.myChart.update(); // Redraw the chart with new data
+      // Add a new label to the start of the xLabels array (using a counter)
+      xLabels.unshift(counter++);
+      
+      // Keep only the latest 60 labels
+      if (xLabels.length > 60) xLabels.pop();
+      
+      // Update the chart's x-axis labels
+      window.myChart.data.labels = xLabels;
 
+      // Optionally autoscale the x-axis: 
+      // If fewer than 60 points, let Chart.js autoscale; otherwise, fix the range to 0-59
+      if (xLabels.length < 60) {
+        window.myChart.options.scales.x.min = undefined;
+        window.myChart.options.scales.x.max = undefined;
+      } else {
+        window.myChart.options.scales.x.min = 0;
+        window.myChart.options.scales.x.max = 59;
+      }
+
+      // Optionally autoscale the y-axis after initialization
+      if (xLabels.length > 1) {
+        window.myChart.options.scales.y.min = undefined;
+        window.myChart.options.scales.y.max = undefined;
+      }
+
+      // Redraw the chart with the new data
+      window.myChart.update('none'); // 'none' eliminates animation for smoother updates
+      
       // Optional: Auto-scroll to the start (left) for smooth effect
       const container = document.querySelector('.chart-container');
       container.scrollLeft = 0;
     }
-
-    // Call once immediately
-    //updateChartSimulatedData();
-
-    // Then call every 1000ms
-    setInterval(updateChartSimulatedData, 1000);
 </script>
 </html>
