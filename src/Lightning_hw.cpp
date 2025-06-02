@@ -82,12 +82,14 @@ try to remember to bump this each time a functional mod is done
                             timestamps and improve rate calculations
 26-May-2025 w9zv    v4.32   changed setup2() to ensure factory defaults for all config registers for AS3935 device are set.
 28-May-2025 w9zv    v4.4    modified station_management rate data printing. track max rates, webtext on rate change. added add'l dummy values to aid 
-                                detection for charting.
+                                detection for charting.\
+01-Jun-2025 w9zv    v5.0    introduced the real-time charting of the lightning rates, strikes, noise, disturbers, and energy.  this is done using Chart.js
+                            library. 
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v4.4";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v5.0";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -941,6 +943,12 @@ void station_management(bool &relayState, byte isr)
     prevDisturberRate  = sm.disturberRate;
     prevNoiseRate      = sm.noiseRate;
     prevPurgeRate      = sm.purgeRate;
+
+    // finally, update the RAS_Status structure with the latest statistics to xmit to the web interface
+    RAS_Status.strikeRate     = sm.strikeRate;
+    RAS_Status.disturberRate  = sm.disturberRate;       
+    RAS_Status.noiseRate      = sm.noiseRate;
+    RAS_Status.purgeRate      = sm.purgeRate;
 
 }
 

@@ -14,6 +14,12 @@ struct RAS_HW_STATUS_STRUCT {
     float strike_distance;  // distance est from storm/strike as a float 16-May-2025 w9zv
     unsigned long strike_energy;
     const char *pSoftwareVersion;
+    
+    // added rates 16-May-2025 w9zv
+    float strikeRate;
+    float disturberRate;
+    float noiseRate;
+    float purgeRate;
 };
 
 // Declare the possible valid host commands in meaningful English. Enums start enumerating

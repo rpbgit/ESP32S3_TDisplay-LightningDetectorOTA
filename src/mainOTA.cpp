@@ -380,44 +380,49 @@ String wrapXmlTag(String tagName, const String& content) {
 // and send it back to the page
 void SendXML(AsyncWebServerRequest *request) {
     // New implementation using String with reserved memory
-    // 5/4/2025 zv make both these buffers static so that they are not reallocated each time
     static char tempBuffer[4096] = {0};
     static String xmlData;
-    xmlData.reserve(4096); // Reserve 2 KB of memory to minimize reallocations
+    xmlData.reserve(4096); // Reserve memory to minimize reallocations
 
     xmlData = "<?xml version='1.0'?>\n<Data>\n";
 
     // Add hardware status
-    get_hardware_status(RAS_Status); // Collect the hardware status that reflects the current state of the buttons/LEDs
+    get_hardware_status(RAS_Status);
     xmlData += pRas->PWR_Button ? "<PWR>1</PWR>\n" : "<PWR>0</PWR>\n";
 
-    // Add other tags
+    // Add other tags (unchanged)
     xmlData += "<NOISE_ACC>" + String(pRas->noise_accum) + "</NOISE_ACC>\n";
     xmlData += "<NOISE_ET>" + String(pRas->noise_et) + "</NOISE_ET>\n";
     xmlData += "<DISTURB_ACC>" + String(pRas->disturber_accum) + "</DISTURB_ACC>\n";
     xmlData += "<DISTURB_ET>" + String(pRas->disturber_et) + "</DISTURB_ET>\n";
     xmlData += "<STRIKE_ACC>" + String(pRas->strike_accum) + "</STRIKE_ACC>\n";
     xmlData += "<STRIKE_ET>" + String(pRas->strike_et) + "</STRIKE_ET>\n";
-    xmlData += "<STRIKE_DIST>" + String(pRas->strike_distance,1) + "</STRIKE_DIST>\n"; // 1 decimal place
+    xmlData += "<STRIKE_DIST>" + String(pRas->strike_distance,1) + "</STRIKE_DIST>\n";
     xmlData += "<STRIKE_ENER>" + String(pRas->strike_energy) + "</STRIKE_ENER>\n";
+
+    // --- Add new RATES tag as a comma-separated list from pRas rate fields ---
+    // Use the float rate fields, not the *_accum fields
+    xmlData += "<RATES>";
+    xmlData += String(pRas->strikeRate, 2) + ",";
+    xmlData += String(pRas->disturberRate, 2) + ",";
+    xmlData += String(pRas->noiseRate, 2) + ",";
+    xmlData += String(pRas->purgeRate, 2); // No trailing comma
+    xmlData += "</RATES>\n";
+    // -------------------------------------------------------------------------
 
     // Add version
     xmlData += "<VER>";
     xmlData += RAS_Status.pSoftwareVersion;
     xmlData += "</VER>\n";
 
-    //Serial.printf("Software Version: %s\n", RAS_Status.pSoftwareVersion);
-    //xmlData += "<VER>" + String(*pRas->pSoftwareVersion) + "</VER>\n";
-
     // Add INFO tag if the RingBuffer is not empty
     if (!RingBuffer.isEmpty()) { 
         RingBuffer.concat_and_remove_all(tempBuffer);
-        xmlData += wrapXmlTag("INFO", tempBuffer);  // convert to HTML CDATA format if needed
+        xmlData += wrapXmlTag("INFO", tempBuffer);
     }
     xmlData += "</Data>\n";
-//Serial.println("YIKES>"); Serial.println( xmlData); // debug print the XML data to the console
     
-        // Send the XML data
+    // Send the XML data
     request->send(200, "text/xml", xmlData);
 }
 /*

@@ -251,7 +251,11 @@
 
 <script type="text/javascript">
     // ============================================= WEB PAGE ABOVE =================================================
-
+// *********************
+// 
+    let USE_SIMULATED_DATA = false; // Set to true to use simulated data for testing
+//
+// *********************
     // global variable visible to all java functions
     var xmlHttp = createXmlHttpObject();
 
@@ -306,87 +310,102 @@
         ta.scrollTop = ta.scrollHeight;
     }
 
-    // function to handle the response FROM the ESP
-    var Strike_last_strike_accumulator_value = 0;
-    var Strike_this_time = 0;
+    // function to handle the XML response FROM the ESP
+    // let Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
+    // let Strike_this_time = 0;
     function response() {
-        var message;
-        var barwidth;
-        var currentsensor;
-        var xmlResponse;
-        var dt = new Date();
-        var color = "#e8e8e8";
+      // implement an equiv to the old C style static variables, survives across function calls
+      response.Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
+      response.Strike_this_time = 0;
+      var message;
+      var barwidth;
+      var currentsensor;
+      var xmlResponse;
+      var dt = new Date();
+      var color = "#e8e8e8";
 
-        xmlResponse = xmlHttp.responseXML;
-        if (xmlResponse == null) return;
+      xmlResponse = xmlHttp.responseXML;
+      if (xmlResponse == null) return;
 
-        document.getElementById("date").innerHTML = dt.toLocaleDateString('en-GB', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric'
-            }).replace(/ /g, '-').toUpperCase();
-        document.getElementById("time").innerHTML = dt.toLocaleTimeString();
+      document.getElementById("date").innerHTML = dt.toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric'
+          }).replace(/ /g, '-').toUpperCase();
+      document.getElementById("time").innerHTML = dt.toLocaleTimeString();
 
-        let xmldoc = xmlResponse.getElementsByTagName("INFO");
-        try {
-            if (xmldoc.length > 0 ){
-                let message = xmldoc[0].firstChild.nodeValue.trim();
-                TextLog(message);
-                console.log(message);
-            }
-        } catch (e) {
-            console.error("Error reading INFO tag:", e);
-        }
-        console.log((new XMLSerializer()).serializeToString(xmlResponse));  // debug
+      let xmldoc = xmlResponse.getElementsByTagName("INFO");
+      try {
+          if (xmldoc.length > 0 ){
+              let message = xmldoc[0].firstChild.nodeValue.trim();
+              TextLog(message);
+              console.log(message);
+          }
+      } catch (e) {
+          console.error("Error reading INFO tag:", e);
+      }
+      console.log((new XMLSerializer()).serializeToString(xmlResponse));  // debug
 
-        xmldoc = xmlResponse.getElementsByTagName("PWR");
-        message = xmldoc[0].firstChild.nodeValue;
-        message == "1" ? color = "#00ff00" : color = "#ff0000";
-        document.getElementById("PWR_Select").style.backgroundColor = color;
+      xmldoc = xmlResponse.getElementsByTagName("PWR");
+      message = xmldoc[0].firstChild.nodeValue;
+      message == "1" ? color = "#00ff00" : color = "#ff0000";
+      document.getElementById("PWR_Select").style.backgroundColor = color;
 
-        xmldoc = xmlResponse.getElementsByTagName("NOISE_ACC");
-        message = xmldoc[0].firstChild.nodeValue;
-        document.getElementById("NoiseAcc").value = message;
+      xmldoc = xmlResponse.getElementsByTagName("NOISE_ACC");
+      message = xmldoc[0].firstChild.nodeValue;
+      document.getElementById("NoiseAcc").value = message;
 
-        xmldoc = xmlResponse.getElementsByTagName("NOISE_ET");
-        message = xmldoc[0].firstChild.nodeValue;
-        document.getElementById("NoiseET").value = message;
+      xmldoc = xmlResponse.getElementsByTagName("NOISE_ET");
+      message = xmldoc[0].firstChild.nodeValue;
+      document.getElementById("NoiseET").value = message;
 
-        xmldoc = xmlResponse.getElementsByTagName("DISTURB_ACC");
-        message = xmldoc[0].firstChild.nodeValue;
-        document.getElementById("DisturberAcc").value = message;
+      xmldoc = xmlResponse.getElementsByTagName("DISTURB_ACC");
+      message = xmldoc[0].firstChild.nodeValue;
+      document.getElementById("DisturberAcc").value = message;
 
-        xmldoc = xmlResponse.getElementsByTagName("DISTURB_ET");
-        message = xmldoc[0].firstChild.nodeValue;
-        document.getElementById("DisturberET").value = message;
+      xmldoc = xmlResponse.getElementsByTagName("DISTURB_ET");
+      message = xmldoc[0].firstChild.nodeValue;
+      document.getElementById("DisturberET").value = message;
 
-        xmldoc = xmlResponse.getElementsByTagName("STRIKE_ACC");
-        message = xmldoc[0].firstChild.nodeValue;
-        document.getElementById("StrikeAcc").value = message;
-        Strike_this_time = Number(message);
-        if( Strike_this_time > Strike_last_strike_accumulator_value) {
-            Strike_last_strike_accumulator_value++;
-        }
+      xmldoc = xmlResponse.getElementsByTagName("STRIKE_ACC");
+      message = xmldoc[0].firstChild.nodeValue;
+      document.getElementById("StrikeAcc").value = message;
+      // the following code is use to determine when to play the strike alarm tone
+      // if the strike accumulator value is greater than the last strike accumulator value,
+      // we have a new strike, so then play the strike alarm tone  
+      response.Strike_this_time = Number(message);
+      if( response.Strike_this_time > response.Strike_last_strike_accumulator_value) {
+        if( ! USE_SIMULATED_DATA ) {
+  //        playStrikeAlarm();  // finally, play the strike alarm tone, multiple tones, had issue with this when lots of strikes
+            playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
+            response.Strike_last_strike_accumulator_value = response.Strike_this_time; // save the last strike accumulator value
+          } else {
+            TextLog(">SIMBEEP<"); // so i dont have to listen to the alarm tone when testing
+            //playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
+            response.Strike_last_strike_accumulator_value = 0; // reset the strike accumulator       
+        } 
+      }
 
-        xmldoc = xmlResponse.getElementsByTagName("STRIKE_ET");
-        message = xmldoc[0].firstChild.nodeValue;
-        document.getElementById("StrikeET").value = message;
+      xmldoc = xmlResponse.getElementsByTagName("STRIKE_ET");
+      message = xmldoc[0].firstChild.nodeValue;
+      document.getElementById("StrikeET").value = message;
 
-        xmldoc = xmlResponse.getElementsByTagName("STRIKE_DIST");
-        message = xmldoc[0].firstChild.nodeValue;
-        document.getElementById("StrikeDist").value = message;
+      xmldoc = xmlResponse.getElementsByTagName("STRIKE_DIST");
+      message = xmldoc[0].firstChild.nodeValue;
+      document.getElementById("StrikeDist").value = message;
 
-        xmldoc = xmlResponse.getElementsByTagName("STRIKE_ENER");
-        message = xmldoc[0].firstChild.nodeValue;
-        document.getElementById("StrikeEnergy").value = message;
+      xmldoc = xmlResponse.getElementsByTagName("STRIKE_ENER");
+      message = xmldoc[0].firstChild.nodeValue;
+      document.getElementById("StrikeEnergy").value = message;
 
-        xmldoc = xmlResponse.getElementsByTagName("VER");
-        if (xmldoc.length > 0) {
-            message = xmldoc[0].firstChild.nodeValue;
-            document.getElementById("headerTitle").textContent = "ESP32 Storm detector " + message;
-        }
+      xmldoc = xmlResponse.getElementsByTagName("VER");
+      if (xmldoc.length > 0) {
+          message = xmldoc[0].firstChild.nodeValue;
+          document.getElementById("headerTitle").textContent = "ESP32 Storm detector " + message;
+      }
 
-        // Update chart data from <RATES> XML tag
+      // Update chart data from <RATES> XML tag
+      if( !USE_SIMULATED_DATA )
         updateChartFromRatesXML(xmlResponse);
     }
     
@@ -445,7 +464,8 @@
             xmlHttp.onreadystatechange = response;
             xmlHttp.send(null);
         }
-        //setTimeout("process()", 500); // Poll every 2 seconds
+        //if(!USE_SIMULATED_DATA)
+          setTimeout("process()", 1000); // Poll the server every 500ms
     }
 
     // --- Chart.js initialization (add your chart logic here) ---
@@ -466,25 +486,30 @@
     // Counter for generating new time points
     var counter = 4;
 
-    // Accent colors for each trace (high contrast)
-    // const colors = [
-    //   '#569CD6', // blue (Strike)
-    //   '#D7BA7D', // yellow (Disturber)
-    //   '#C586C0', // purple (Noise)
-    //   '#9CDCFE'  // cyan (Purge)
-    // ];
     const colors = [
-      '#FF3333', // red (Strike)
-      '#FFD700', // gold/yellow (Disturber)
-      '#33B5FF', // bright blue (Noise)
-      '#00FF99'  // bright green/cyan (Purge)
+      '#569CD6', // blue (Strike)
+      '#D7BA7D', // yellow (Disturber)
+      '#C586C0', // purple (Noise)
+      '#9CDCFE'  // cyan (Purge)
     ];
+    // const colors = [
+          // Accent colors for each trace (high contrast)
+    //   '#FF3333', // red (Strike)
+    //   '#FFD700', // gold/yellow (Disturber)
+    //   '#33B5FF', // bright blue (Noise)
+    //   '#00FF99'  // bright green/cyan (Purge)
+    // ];
 
     // Human-friendly names for each trace
     const traceNames = ['Strike', 'Disturber', 'Noise', 'Purge'];
 
+    // Wait until the DOM is fully loaded before running this function.
+    // This ensures that all HTML elements (like the canvas for the chart) are available.
     document.addEventListener("DOMContentLoaded", function() {
+      // Get the 2D drawing context from the canvas element with id 'myChart'
       const ctx = document.getElementById('myChart').getContext('2d');
+
+      // Create a new Chart.js line chart and assign it to a global variable for later updates
       window.myChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -495,7 +520,7 @@
             borderColor: colors[i],                // Line color
             backgroundColor: colors[i] + '33',     // 20% opacity fill under line
             cubicInterpolationMode: 'default',     // Smoother lines (can use 'monotone')
-            tension: 0.25                           // Line tension for smoothness
+            tension: 0.25                          // Line tension for smoothness
           }))
         },
         options: {
@@ -505,7 +530,7 @@
             legend: {
               labels: {
                 color: '#d4d4d4',                 // Legend text color
-                // Custom label generation to show latest value in legend, comment out if not needed
+                // Custom label generation to show latest value in legend
                 generateLabels: function(chart) {
                   // Get the default labels
                   const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
@@ -524,7 +549,7 @@
             },
             title: {
               display: true,
-              text: 'Sliding Window Event Rates',
+              text: 'Sliding Event Rates',
               color: '#d4d4d4',
               font: {
                 size: 14,      // Reduce from 20 to 14 (or smaller if you want)
@@ -569,24 +594,26 @@
           }
         } // <-- closes options
       }); // <-- closes new Chart
-// console.log('myChart:', window.myChart);
-// console.log('xLabels:', xLabels);
-      // updateChartSimulatedData(); // <-- call here, after chart is created
-      // setInterval(updateChartSimulatedData, 2000);
+
+      // Optionally, you could start simulated data updates here after the chart is created:
+      if(USE_SIMULATED_DATA) {
+        // Call the update function immediately to start the simulation
+        updateChartSimulatedData();
+        setInterval(updateChartSimulatedData, 1000);
+      }
     }); // <-- closes DOMContentLoaded
 
 
     // --- REAL-TIME DATA SIMULATION AND SLIDING WINDOW LOGIC ---
-
     function updateChartSimulatedData() {
       if (!window.myChart) return; // If chart not initialized, exit
       // For each trace, add a new random data point at the start (newest on the left)
       for (let i = 0; i < dataValues.length; i++) {
-        let newValue = Math.floor(Math.random() * 12) + 0; // Random value between 5 and 34
-        //let newValue = 4;
-        dataValues[i].unshift(newValue);                   // Insert at the beginning
-        if (dataValues[i].length > 60)                     // Keep only the latest 60 points
-          dataValues[i] = dataValues[i].slice(0, 60);
+        let newValue = Math.random() * 12; // Random float between 0 and 12
+        // Only allow zero or positive floating point numbers
+        if (isNaN(newValue) || newValue < 0) newValue = 0;
+        dataValues[i].unshift(newValue);
+        if (dataValues[i].length > 60) dataValues[i] = dataValues[i].slice(0, 60);
       }
 
       // Add new time label at the start (for autoscaling phase)
@@ -608,8 +635,9 @@
 
       // --- AUTOSCALE Y AXIS AFTER INITIALIZATION ---
       if (xLabels.length > 1) {
-        // Let Chart.js autoscale the y-axis based on the data
-        window.myChart.options.scales.y.min = undefined;
+        // Let Chart.js autoscale the y-axis based on the data,
+        // but do not allow the minimum y value to go below zero
+        window.myChart.options.scales.y.min = 0;
         window.myChart.options.scales.y.max = undefined;
       }
 
@@ -626,12 +654,7 @@
       container.scrollLeft = 0; // Scroll to the leftmost position
     }
 
-    // // Call once immediately
-    // updateChartSimulatedData();
-
-    // // Then call every 1000ms
-    setInterval(updateChartSimulatedData, 1000);
-
+    // --- CHART UPDATE FUNCTION FROM XML DATA ---
     // Updates the chart with new data from the <RATES> XML tag.
     // Call this from your response() function after receiving new XML data.
     function updateChartFromRatesXML(xmlResponse) {
@@ -642,23 +665,19 @@
       if (!ratesTag || ratesTag.length === 0) return; // If no <RATES> tag found, exit
 
       // Get the comma-separated string of rates from the tag
-      // Use textContent if available, otherwise fallback to firstChild.nodeValue
       const ratesString = ratesTag[0].textContent || ratesTag[0].firstChild.nodeValue;
       if (!ratesString) return; // If the tag is empty, exit
 
-      // Split the string into an array of numbers (assumes CSV format)
-      const rateValues = ratesString.split(',').map(Number);
+      // Split the string into an array of floats and sanitize
+      const rateValues = ratesString.split(',').map(val => {
+        let f = parseFloat(val);
+        return (isNaN(f) || f < 0) ? 0 : f;
+      });
 
       // For each trace (Strike, Disturber, Noise, Purge):
       for (let i = 0; i < dataValues.length; i++) {
-        // Add the new value to the start of the trace's data array
-        // If a value is missing, use 0 as a fallback
         dataValues[i].unshift(rateValues[i] || 0);
-
-        // Keep only the latest 60 points for each trace
         if (dataValues[i].length > 60) dataValues[i].pop();
-
-        // Update the chart's dataset with the new data array
         window.myChart.data.datasets[i].data = dataValues[i];
       }
 
@@ -674,7 +693,7 @@
       // Optionally autoscale the x-axis: 
       // If fewer than 60 points, let Chart.js autoscale; otherwise, fix the range to 0-59
       if (xLabels.length < 60) {
-        window.myChart.options.scales.x.min = undefined;
+        window.myChart.options.scales.x.min = 0;
         window.myChart.options.scales.x.max = undefined;
       } else {
         window.myChart.options.scales.x.min = 0;
