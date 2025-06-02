@@ -1,56 +1,7 @@
 /*
   OK, ya ready for some fun? HTML + CSS styling + javascript all in and undebuggable environment
 
-  one trick I've learned to how to debug HTML and CSS code.
-
-  get all your HTML code (from html to /html) and past it into this test site
-  muck with the HTML and CSS code until it's what you want
-  https://www.w3schools.com/html/tryit.asp?filename=tryhtml_intro
-
-  No clue how to debug javascrip other that write, compile, upload, refresh, guess, repeat
-
-  I'm using class designators to set styles and id's for data updating
-  for example:
-  the CSS class .tabledata defines with the cell will look like
-  <td><div class="tabledata" id = "switch"></div></td>
-
-  the XML code will update the data where id = "switch"
-  java script then uses getElementById
-  document.getElementById("switch").innerHTML="Switch is OFF";
-
-
-  .. now you can have the class define the look AND the class update the content, but you will then need
-  a class for every data field that must be updated, here's what that will look like
-  <td><div class="switch"></div></td>
-
-  the XML code will update the data where class = "switch"
-  java script then uses getElementsByClassName
-  document.getElementsByClassName("switch")[0].style.color=text_color;
-
-
-  the main general sections of a web page are the following and used here
-
-  <html>
-    <style>
-    // dump CSS style stuff in here
-    </style>
-    <body>
-      <header>
-      // put header code for cute banners here
-      </header>
-      <main>
-      // the buld of your web page contents
-      </main>
-      <footer>
-      // put cute footer (c) 2021 xyz inc type thing
-      </footer>
-    </body>
-    <script>
-    // you java code between these tags
-    </script>
-  </html>
-
-
+  
 */
 
 // note R"KEYWORD( html page code )KEYWORD"; 
@@ -373,9 +324,12 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     // let Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
     // let Strike_this_time = 0;
     function response() {
-      // implement an equiv to the old C style static variables, survives across function calls
-      response.Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
-      response.Strike_this_time = 0;
+      if (typeof response.Strike_last_strike_accumulator_value === "undefined") {
+        response.Strike_last_strike_accumulator_value = 0;
+      }
+      // Now use response.Strike_last_strike_accumulator_value like a C static variable
+      
+      let Strike_acc_this_time = 0;
       var message;
       var barwidth;
       var currentsensor;
@@ -432,12 +386,13 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       // the following code is use to determine when to play the strike alarm tone
       // if the strike accumulator value is greater than the last strike accumulator value,
       // we have a new strike, so then play the strike alarm tone  
-      response.Strike_this_time = Number(message);
-      if( response.Strike_this_time > response.Strike_last_strike_accumulator_value) {
+      Strike_acc_this_time = Number(message);
+      if( Strike_acc_this_time > response.Strike_last_strike_accumulator_value) {
         if( ! USE_SIMULATED_DATA ) {
   //        playStrikeAlarm();  // finally, play the strike alarm tone, multiple tones, had issue with this when lots of strikes
             playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
-            response.Strike_last_strike_accumulator_value = response.Strike_this_time; // save the last strike accumulator value
+            TextLog(">BEEP<"); // so i dont have to ddlisten to the alarm tone when testing
+            response.Strike_last_strike_accumulator_value = Strike_acc_this_time; // save the last strike accumulator value to detect change
           } else {
             TextLog(">SIMBEEP<"); // so i dont have to listen to the alarm tone when testing
             //playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
