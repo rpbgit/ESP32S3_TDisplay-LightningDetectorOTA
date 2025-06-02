@@ -110,7 +110,7 @@ extern void WebText(const char *format, ...);
 // Function prototype for power relay control
 void power_relay_set_reset(HostCmdEnum& command);    //Power On/Off Hardware function.
 void power_relay_control(bool power_state) ; // 
-void station_management (bool &relayState, byte isr ) ;
+void stats_generation (bool &relayState, byte isr ) ;
 
 void manage_tft_power_field() ; // manage the power field on the TFT screen, green for on, red for off.
 
@@ -687,11 +687,10 @@ void loop2(HostCmdEnum & host_command)
                 break;
             }
         }
-        
     }
     
     // Manage the station based on the strike algorithm and stats
-    station_management(relayState, interrupt_reg_value); // Pass the ISR value to the power management function
+    stats_generation(relayState, interrupt_reg_value); // Pass the ISR value to the power management function
 
     // let commandparser handle any user input commands.
     cp.processInput();
@@ -753,7 +752,7 @@ void loop2(HostCmdEnum & host_command)
 // relayState: reference to relay state variable
 // isr: interrupt source register value (event type)
 #define MAX_EVENT_TIMESTAMPS 64
-struct station_management_struct {
+struct statistics_struct {
     unsigned long strikeCount;
     unsigned long disturberCount;
     unsigned long noiseCount;
@@ -768,19 +767,6 @@ struct station_management_struct {
     float maxDisturberRate;
     float maxNoiseRate;
     float maxPurgeRate;
-
-    // Sliding window buffers
-    unsigned long strikeTimestamps[MAX_EVENT_TIMESTAMPS];
-    int strikeHead, strikeCountInBuf;
-
-    unsigned long disturberTimestamps[MAX_EVENT_TIMESTAMPS];
-    int disturberHead, disturberCountInBuf;
-
-    unsigned long noiseTimestamps[MAX_EVENT_TIMESTAMPS];
-    int noiseHead, noiseCountInBuf;
-
-    unsigned long purgeTimestamps[MAX_EVENT_TIMESTAMPS];
-    int purgeHead, purgeCountInBuf;
 
     unsigned long lastRateCalcTick;
 };
@@ -834,34 +820,49 @@ int count_events_in_window(unsigned long *buf, int head, int count, unsigned lon
  * web interface every 10 seconds, and only after at least 1 minute of rate calculations has
  * occurred (to ensure the sliding window is fully populated).
  * 
+ * Only the actual stats are kept in the struct; the sliding window buffers are now local static variables.
+ * 
  * @param relayState Reference to relay state variable (not used in this function, but may be used for future power management logic)
  * @param isr Interrupt source register value (event type)
  */
-void station_management(bool &relayState, byte isr)
+void stats_generation(bool &relayState, byte isr)
 {
-    // Static structure to hold all event counts, rates, and circular buffers
-    static station_management_struct sm = {0};
+    // Static structure to hold all event counts, rates, and max rates
+    static statistics_struct stats = {0};
     unsigned long now = millis();
+
+    // --- Sliding window buffers for event timestamps (now local static variables) ---
+    static unsigned long strikeTimestamps[MAX_EVENT_TIMESTAMPS];
+    static int strikeHead = 0, strikeCountInBuf = 0;
+
+    static unsigned long disturberTimestamps[MAX_EVENT_TIMESTAMPS];
+    static int disturberHead = 0, disturberCountInBuf = 0;
+
+    static unsigned long noiseTimestamps[MAX_EVENT_TIMESTAMPS];
+    static int noiseHead = 0, noiseCountInBuf = 0;
+
+    static unsigned long purgeTimestamps[MAX_EVENT_TIMESTAMPS];
+    static int purgeHead = 0, purgeCountInBuf = 0;
 
     // --- 1. Record event timestamps in circular buffers ---
     switch (isr) {
         case LIGHTNING_INT:
-            sm.strikeCount++;
-            add_event_timestamp(sm.strikeTimestamps, &sm.strikeHead, &sm.strikeCountInBuf, now);
+            stats.strikeCount++;
+            add_event_timestamp(strikeTimestamps, &strikeHead, &strikeCountInBuf, now);
             break;
         case DISTURBER_INT:
-            sm.disturberCount++;
-            add_event_timestamp(sm.disturberTimestamps, &sm.disturberHead, &sm.disturberCountInBuf, now);
+            stats.disturberCount++;
+            add_event_timestamp(disturberTimestamps, &disturberHead, &disturberCountInBuf, now);
             break;
         case NOISE_INT:
-            sm.noiseCount++;
-            add_event_timestamp(sm.noiseTimestamps, &sm.noiseHead, &sm.noiseCountInBuf, now);
+            stats.noiseCount++;
+            add_event_timestamp(noiseTimestamps, &noiseHead, &noiseCountInBuf, now);
             break;
         case PASSTHRU_INT:
             break;
         default:
-            sm.purgeCount++;
-            add_event_timestamp(sm.purgeTimestamps, &sm.purgeHead, &sm.purgeCountInBuf, now);
+            stats.purgeCount++;
+            add_event_timestamp(purgeTimestamps, &purgeHead, &purgeCountInBuf, now);
             break;
     }
 
@@ -875,22 +876,22 @@ void station_management(bool &relayState, byte isr)
         unsigned long windowMillis = RATE_WINDOW_SECONDS * 1000UL;
         unsigned long cutoff = now - windowMillis;
 
-        int strikes = count_events_in_window(sm.strikeTimestamps, sm.strikeHead, sm.strikeCountInBuf, cutoff);
-        int disturbers = count_events_in_window(sm.disturberTimestamps, sm.disturberHead, sm.disturberCountInBuf, cutoff);
-        int noises = count_events_in_window(sm.noiseTimestamps, sm.noiseHead, sm.noiseCountInBuf, cutoff);
-        int purges = count_events_in_window(sm.purgeTimestamps, sm.purgeHead, sm.purgeCountInBuf, cutoff);
+        int strikes = count_events_in_window(strikeTimestamps, strikeHead, strikeCountInBuf, cutoff);
+        int disturbers = count_events_in_window(disturberTimestamps, disturberHead, disturberCountInBuf, cutoff);
+        int noises = count_events_in_window(noiseTimestamps, noiseHead, noiseCountInBuf, cutoff);
+        int purges = count_events_in_window(purgeTimestamps, purgeHead, purgeCountInBuf, cutoff);
 
         float windowMinutes = (float)RATE_WINDOW_SECONDS / 60.0f;
-        sm.strikeRate = strikes / windowMinutes;
-        sm.disturberRate = disturbers / windowMinutes;
-        sm.noiseRate = noises / windowMinutes;
-        sm.purgeRate = purges / windowMinutes;
+        stats.strikeRate = strikes / windowMinutes;
+        stats.disturberRate = disturbers / windowMinutes;
+        stats.noiseRate = noises / windowMinutes;
+        stats.purgeRate = purges / windowMinutes;
 
         // Track max rates for each event type
-        if (sm.strikeRate    > sm.maxStrikeRate)    sm.maxStrikeRate    = sm.strikeRate;
-        if (sm.disturberRate > sm.maxDisturberRate) sm.maxDisturberRate = sm.disturberRate;
-        if (sm.noiseRate     > sm.maxNoiseRate)     sm.maxNoiseRate     = sm.noiseRate;
-        if (sm.purgeRate     > sm.maxPurgeRate)     sm.maxPurgeRate     = sm.purgeRate;
+        if (stats.strikeRate    > stats.maxStrikeRate)    stats.maxStrikeRate    = stats.strikeRate;
+        if (stats.disturberRate > stats.maxDisturberRate) stats.maxDisturberRate = stats.disturberRate;
+        if (stats.noiseRate     > stats.maxNoiseRate)     stats.maxNoiseRate     = stats.noiseRate;
+        if (stats.purgeRate     > stats.maxPurgeRate)     stats.maxPurgeRate     = stats.purgeRate;
 
         if (firstRateUpdate == 0) firstRateUpdate = now;
         rateUpdateCount++;
@@ -901,55 +902,41 @@ void station_management(bool &relayState, byte isr)
     static unsigned long lastWebPrint = 0;
     const unsigned long WEB_PRINT_INTERVAL_MS = 10000; // 10 seconds
 
-    bool anyRateNonZero = (sm.strikeRate != 0.0f) || (sm.disturberRate != 0.0f) || (sm.noiseRate != 0.0f) || (sm.purgeRate != 0.0f);
+    bool anyRateNonZero = (stats.strikeRate != 0.0f) || (stats.disturberRate != 0.0f) || (stats.noiseRate != 0.0f) || (stats.purgeRate != 0.0f);
 
     // Store summation of previous rates to detect changes
     static float prevStrikeRate = -1.0f, prevDisturberRate = -1.0f, prevNoiseRate = -1.0f, prevPurgeRate = -1.0f;
     
     // Check if rates have changed since last print
     bool ratesChanged =
-        (sm.strikeRate    != prevStrikeRate)    ||
-        (sm.disturberRate != prevDisturberRate) ||
-        (sm.noiseRate     != prevNoiseRate)     ||
-        (sm.purgeRate     != prevPurgeRate);
-
-    // Print if any rate is non-zero, or if rates just transitioned to zero
-    // if (now - lastWebPrint >= WEB_PRINT_INTERVAL_MS &&              // print every 10 seconds and
-    //     (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL && // after at least 1 minute of rate calculations
-    //     (anyRateNonZero || wasAnyRateNonZero)) {    
+        (stats.strikeRate    != prevStrikeRate)    ||
+        (stats.disturberRate != prevDisturberRate) ||
+        (stats.noiseRate     != prevNoiseRate)     ||
+        (stats.purgeRate     != prevPurgeRate);
 
     if (ratesChanged && (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL ) {
         if(anyRateNonZero) {
             WebText(
                 "SM Rates: strike (%.1f/min), disturber (%.1f/min), noise (%.1f/min), purge (%.1f/min) 7, 7, 7, 7,\n",
-                sm.strikeRate, sm.disturberRate, sm.noiseRate, sm.purgeRate
+                stats.strikeRate, stats.disturberRate, stats.noiseRate, stats.purgeRate
             );
-            // WebText(
-            //     "SMgmt Stats: %lu strikes (%.1f/min), %lu disturbers (%.1f/min), "
-            //     "%lu noise events (%.1f/min), %lu purges (%.1f/min)\n",
-            //     sm.strikeCount,    sm.strikeRate,
-            //     sm.disturberCount, sm.disturberRate,
-            //     sm.noiseCount,     sm.noiseRate,
-            //     sm.purgeCount,     sm.purgeRate
-            // );
         } else 
             WebText("SM Rates are now zero. 0 0 0 0 0 0 0 0 \n");
         
         WebText( "\tMax Rate: strike %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
-                    sm.maxStrikeRate, sm.maxDisturberRate, sm.maxNoiseRate, sm.maxPurgeRate );
+                    stats.maxStrikeRate, stats.maxDisturberRate, stats.maxNoiseRate, stats.maxPurgeRate );
     }
     // Update previous rates to detect change
-    prevStrikeRate     = sm.strikeRate;
-    prevDisturberRate  = sm.disturberRate;
-    prevNoiseRate      = sm.noiseRate;
-    prevPurgeRate      = sm.purgeRate;
+    prevStrikeRate     = stats.strikeRate;
+    prevDisturberRate  = stats.disturberRate;
+    prevNoiseRate      = stats.noiseRate;
+    prevPurgeRate      = stats.purgeRate;
 
     // finally, update the RAS_Status structure with the latest statistics to xmit to the web interface
-    RAS_Status.strikeRate     = sm.strikeRate;
-    RAS_Status.disturberRate  = sm.disturberRate;       
-    RAS_Status.noiseRate      = sm.noiseRate;
-    RAS_Status.purgeRate      = sm.purgeRate;
-
+    RAS_Status.strikeRate     = stats.strikeRate;
+    RAS_Status.disturberRate  = stats.disturberRate;       
+    RAS_Status.noiseRate      = stats.noiseRate;
+    RAS_Status.purgeRate      = stats.purgeRate;
 }
 
 // manage the tft power field display by reading the RELAY_SENSE_STATE GPIO pin, encapsulate it here if how we do so changes.
