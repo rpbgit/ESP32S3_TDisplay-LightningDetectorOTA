@@ -752,24 +752,6 @@ void loop2(HostCmdEnum & host_command)
 // relayState: reference to relay state variable
 // isr: interrupt source register value (event type)
 #define MAX_EVENT_TIMESTAMPS 64
-struct statistics_struct {
-    unsigned long strikeCount;
-    unsigned long disturberCount;
-    unsigned long noiseCount;
-    unsigned long purgeCount;
-
-    float strikeRate;
-    float disturberRate;
-    float noiseRate;
-    float purgeRate;
-
-    float maxStrikeRate;
-    float maxDisturberRate;
-    float maxNoiseRate;
-    float maxPurgeRate;
-
-    unsigned long lastRateCalcTick;
-};
 
 // Helper function to add an event timestamp to a circular buffer
 // buf: pointer to the buffer array

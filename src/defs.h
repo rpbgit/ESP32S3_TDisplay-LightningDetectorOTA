@@ -1,6 +1,7 @@
-
 #ifndef DEFS_H
 #define DEFS_H  // prevent multiple definitions on Arduino IDE.
+
+#include <Arduino.h> // For unsigned long and float types
 
 // structure to hold the hw status going up to the webpage.
 struct RAS_HW_STATUS_STRUCT {
@@ -48,5 +49,23 @@ enum class HostCmdEnum : byte {
 
 #define TFT_IM_HERE() _tft_im_here(__LINE__);
 
+struct statistics_struct {
+    unsigned long strikeCount;
+    unsigned long disturberCount;
+    unsigned long noiseCount;
+    unsigned long purgeCount;
+
+    float strikeRate;
+    float disturberRate;
+    float noiseRate;
+    float purgeRate;
+
+    float maxStrikeRate;
+    float maxDisturberRate;
+    float maxNoiseRate;
+    float maxPurgeRate;
+
+    unsigned long lastRateCalcTick;
+};
 
 #endif
