@@ -27,7 +27,7 @@ this file manages the wifi connections and communications to the web client for 
 // start your defines for pins for sensors, outputs etc.
 #define PIN_LED 48 // On board LED
 
-unsigned long gLongest_loop_time = 0; // so that the hw handler can access it.
+unsigned long gLongest_loop_time = 0; // global so that the Lightning_hw.cpp can access it to reset/retrieve the value.
 bool bWiFi_Connected = false;
 
 // forward ref function prototype
@@ -61,9 +61,6 @@ void showWiFiNetworksFound(int numNetworks); // forward ref
 
 // the XML array size needs to be bigger than your maximum expected size. 2048 is way too big for this example
 char XML_buffer[4096] = {0};
-
-// just some buffer holder for char operations
-char buf[1024]  = {0};
 
 // buffer to hold INFO message before being built into an XML msg
 StringRingBuffer RingBuffer;
@@ -212,6 +209,8 @@ delay(1000);
 
 void loop()
 {
+    unsigned long loopBegin = millis();
+
     // Check if WiFi is disconnected and it's time to attempt reconnection
     if (!bWiFi_Connected && millis() - lastReconnectAttempt >= reconnectInterval) {
         Serial.println("Attempting to reconnect to WiFi...");
@@ -229,18 +228,16 @@ void loop()
     // All the hardware management is handled by loop2() in xxx_hw.ino/cpp
     loop2(gHostCmd);
 
-    // Keep track of the longest exec loop time
-    static unsigned long gLongest_loop_time = 0;
-    unsigned long loopBegin = millis();
+    // Give other threads/tasks a chance
+    delay(2);
+
+    // Now measure elapsed time for the whole loop
     unsigned long elapsed = millis() - loopBegin;
     if (elapsed > gLongest_loop_time) {
         gLongest_loop_time = elapsed;
         Serial.print(F("EXEC_LOOP MAX LATENCY MS: "));
         Serial.println(gLongest_loop_time, DEC);
     }
-
-    // Give other threads/tasks a chance
-    delay(2);
 }
 
 // wifi event handlers.
@@ -343,12 +340,20 @@ void SendWebsite(AsyncWebServerRequest *request)
  *          that the XML document remains valid and can be parsed correctly.
  */
 String escapeXml(const String& input) {
-    String out = input;
-    out.replace("&", "&amp;");
-    out.replace("<", "&lt;");
-    out.replace(">", "&gt;");
-    out.replace("\"", "&quot;");
-    out.replace("'", "&apos;");
+    String out;
+    out.reserve(input.length()); // Reserve at least the input size
+
+    for (size_t i = 0; i < input.length(); ++i) {
+        char c = input[i];
+        switch (c) {
+            case '&':  out += F("&amp;");  break;
+            case '<':  out += F("&lt;");   break;
+            case '>':  out += F("&gt;");   break;
+            case '"':  out += F("&quot;"); break;
+            case '\'': out += F("&apos;"); break;
+            default:   out += c;           break;
+        }
+    }
     return out;
 }
 
