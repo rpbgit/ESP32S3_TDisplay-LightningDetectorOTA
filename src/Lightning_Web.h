@@ -9,6 +9,7 @@
 
 const char PAGE_MAIN[] PROGMEM = R"=====(
 <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" class="js-focus-visible">
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -63,26 +64,38 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         justify-content: space-between;
         align-items: center;
         width: 100%;
-        height: 40px;
+        height: 28px;           /* Reduce height */
         margin: 0;
-        padding: 10px 0px;
+        padding: 2px 0px;       /* Reduce padding */
         background-color: #FFF;
         color: #000000;
-        border-bottom: 5px solid #293578;
+        border-bottom: 3px solid #293578; /* Thinner border */
+    }
+
+    .container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
     }
 
     .navtitle {
         font-family: "Copperplate", "Arial", sans-serif;
-        font-size: 22px;
+        font-size: 16px;        /* Smaller font */
         font-weight: bold;
-        line-height: 30px;
-        padding-left: 7px;
+        line-height: 20px;      /* Tighter line height */
+        padding-left: 4px;      /* Less padding */
         white-space: nowrap;
     }
 
     .navinfo {
         display: flex;
         align-items: center;
+        white-space: nowrap;
+        gap: 6px;               /* Less gap */
     }
 
     .navheading, .navdata {
@@ -99,6 +112,9 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     }
 
     .navdata {
+        font-size: 12px;        /* Smaller font */
+        line-height: 16px;
+        padding-right: 8px;     /* Less padding */
         margin-left: 10px;
     }
 
@@ -242,19 +258,19 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         <label for="StrikeEnergy">Strike Energy:</label>
         <textarea readonly class="myDatabox" id="StrikeEnergy" name="StrikeEnergy" rows="1" cols="5">123456</textarea>
     </div>
-
-    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
     <hr>
-    <div class="myDiv1">
-        <textarea readonly class="termta" id="Terminal" name="Terminal" rows="20" cols="200"></textarea>
-        <textarea class="termta" id="TermInput" name="TermInput" rows="1" cols="200">CMD> </textarea>
-    </div>
     <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
-
     <!-- Chart container for real-time charting -->
     <div class="chart-container">
       <canvas id="myChart"></canvas>
     </div>
+    <hr>
+    <div class="myDiv1">
+        <textarea readonly class="termta" id="Terminal" name="Terminal" rows="10" cols="200"></textarea>
+        <textarea class="termta" id="TermInput" name="TermInput" rows="1" cols="200">CMD> </textarea>
+    </div>
+    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
+
 
     <footer div class="foot" id="Chincey">THIS IS A TEST FOOTER</div>
     </footer>
@@ -263,7 +279,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     // ============================================= WEB PAGE ABOVE =================================================
 // *********************
 // 
-    let USE_SIMULATED_DATA = false; // Set to true to use simulated data for testing
+    let USE_SIMULATED_DATA = true; // Set to true to use simulated data for testing
 //
 // *********************
     // global variable visible to all java functions
@@ -324,12 +340,9 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     // let Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
     // let Strike_this_time = 0;
     function response() {
-      if (typeof response.Strike_last_strike_accumulator_value === "undefined") {
-        response.Strike_last_strike_accumulator_value = 0;
-      }
-      // Now use response.Strike_last_strike_accumulator_value like a C static variable
-      
-      let Strike_acc_this_time = 0;
+      // implement an equiv to the old C style static variables, survives across function calls
+      response.Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
+      response.Strike_this_time = 0;
       var message;
       var barwidth;
       var currentsensor;
@@ -386,13 +399,12 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       // the following code is use to determine when to play the strike alarm tone
       // if the strike accumulator value is greater than the last strike accumulator value,
       // we have a new strike, so then play the strike alarm tone  
-      Strike_acc_this_time = Number(message);
-      if( Strike_acc_this_time > response.Strike_last_strike_accumulator_value) {
+      response.Strike_this_time = Number(message);
+      if( response.Strike_this_time > response.Strike_last_strike_accumulator_value) {
         if( ! USE_SIMULATED_DATA ) {
   //        playStrikeAlarm();  // finally, play the strike alarm tone, multiple tones, had issue with this when lots of strikes
             playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
-            TextLog(">BEEP<"); // so i dont have to ddlisten to the alarm tone when testing
-            response.Strike_last_strike_accumulator_value = Strike_acc_this_time; // save the last strike accumulator value to detect change
+            response.Strike_last_strike_accumulator_value = response.Strike_this_time; // save the last strike accumulator value
           } else {
             TextLog(">SIMBEEP<"); // so i dont have to listen to the alarm tone when testing
             //playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
@@ -479,7 +491,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
             xmlHttp.send(null);
         }
         //if(!USE_SIMULATED_DATA)
-          setTimeout("process()", 1000); // Poll the server every 500ms
+          setTimeout("process()", 500); // Poll the server every 500ms
     }
 
     // --- Chart.js initialization (add your chart logic here) ---
@@ -544,6 +556,8 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
             legend: {
               labels: {
                 color: '#d4d4d4',                 // Legend text color
+                boxWidth: 16,   // default is 40, reduce for smaller boxes
+                boxHeight: 8,   // default is 12, reduce for smaller boxes
                 // Custom label generation to show latest value in legend
                 generateLabels: function(chart) {
                   // Get the default labels
@@ -623,7 +637,8 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       if (!window.myChart) return; // If chart not initialized, exit
       // For each trace, add a new random data point at the start (newest on the left)
       for (let i = 0; i < dataValues.length; i++) {
-        let newValue = Math.random() * 12; // Random float between 0 and 12
+        let newValue = Math.random() * 12;
+        newValue = Math.round(newValue * 10) / 10; // Limit to 1 decimal point
         // Only allow zero or positive floating point numbers
         if (isNaN(newValue) || newValue < 0) newValue = 0;
         dataValues[i].unshift(newValue);
@@ -638,7 +653,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       if (xLabels.length < 60) {
         // If fewer than 60 points, let Chart.js autoscale the x-axis
         window.myChart.data.labels = xLabels; // Use the current labels array for the x-axis
-        window.myChart.options.scales.x.min = 0; // Remove fixed min so Chart.js can autoscale
+        window.myChart.options.scales.x.min = undefined; // Remove fixed min so Chart.js can autoscale
         window.myChart.options.scales.x.max = undefined; // Remove fixed max so Chart.js can autoscale
       } else {
         // Once we have 60 or more points, fix the x-axis range to always show 0-59
@@ -649,8 +664,9 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
 
       // --- AUTOSCALE Y AXIS AFTER INITIALIZATION ---
       if (xLabels.length > 1) {
-        // Let Chart.js autoscale the y-axis based on the data
-        window.myChart.options.scales.y.min = 0;  // Start y-axis at 0
+        // Let Chart.js autoscale the y-axis based on the data,
+        // but do not allow the minimum y value to go below zero
+        window.myChart.options.scales.y.min = 0;
         window.myChart.options.scales.y.max = undefined;
       }
 
@@ -715,7 +731,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
 
       // Optionally autoscale the y-axis after initialization
       if (xLabels.length > 1) {
-        window.myChart.options.scales.y.min = 0; // Start y-axis at 0
+        window.myChart.options.scales.y.min = undefined;
         window.myChart.options.scales.y.max = undefined;
       }
 
