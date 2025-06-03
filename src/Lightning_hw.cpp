@@ -110,8 +110,7 @@ extern void WebText(const char *format, ...);
 // Function prototype for power relay control
 void power_relay_set_reset(HostCmdEnum& command);    //Power On/Off Hardware function.
 void power_relay_control(bool power_state) ; // 
-void stats_generation (bool &relayState, byte isr ) ;
-
+void stats_generation(int interrupt_source_register); 
 void manage_tft_power_field() ; // manage the power field on the TFT screen, green for on, red for off.
 
 // Function prototypes for command handlers
@@ -689,8 +688,8 @@ void loop2(HostCmdEnum & host_command)
         }
     }
     
-    // Manage the station based on the strike algorithm and stats
-    stats_generation(relayState, interrupt_reg_value); // Pass the ISR value to the power management function
+    // generate rate stats
+    stats_generation(interrupt_reg_value); // Pass the ISR value to the power management function
 
     // let commandparser handle any user input commands.
     cp.processInput();
@@ -785,7 +784,6 @@ int count_events_in_window(unsigned long *buf, int head, int count, unsigned lon
 }
 
 /**
- * @brief Main station management function.
  * 
  * This function tracks event statistics (strikes, disturbers, noise, purges) and calculates
  * their rates per minute using a sliding window algorithm. It uses circular buffers to store
@@ -803,11 +801,8 @@ int count_events_in_window(unsigned long *buf, int head, int count, unsigned lon
  * occurred (to ensure the sliding window is fully populated).
  * 
  * Only the actual stats are kept in the struct; the sliding window buffers are now local static variables.
- * 
- * @param relayState Reference to relay state variable (not used in this function, but may be used for future power management logic)
- * @param isr Interrupt source register value (event type)
  */
-void stats_generation(bool &relayState, byte isr)
+void stats_generation(int interrupt_source_register)
 {
     // Static structure to hold all event counts, rates, and max rates
     static statistics_struct stats = {0};
@@ -827,7 +822,7 @@ void stats_generation(bool &relayState, byte isr)
     static int purgeHead = 0, purgeCountInBuf = 0;
 
     // --- 1. Record event timestamps in circular buffers ---
-    switch (isr) {
+    switch (interrupt_source_register) {
         case LIGHTNING_INT:
             stats.strikeCount++;
             add_event_timestamp(strikeTimestamps, &strikeHead, &strikeCountInBuf, now);
