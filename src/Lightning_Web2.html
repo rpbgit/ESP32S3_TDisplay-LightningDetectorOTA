@@ -626,108 +626,92 @@
 
     // --- REAL-TIME DATA SIMULATION AND SLIDING WINDOW LOGIC ---
     function updateChartSimulatedData() {
-      if (!window.myChart) return; // If chart not initialized, exit
-      // For each trace, add a new random data point at the start (newest on the left)
+      // Exit if the chart is not initialized
+      if (!window.myChart) return;
+
+      let rateValues = [];
+      // Generate a new random value for each trace (Strike, Disturber, Noise, Purge)
       for (let i = 0; i < dataValues.length; i++) {
+        // Generate a random value between 0 and 12, rounded to 1 decimal place
         let newValue = Math.random() * 12;
-        newValue = Math.round(newValue * 10) / 10; // Limit to 1 decimal point
-        // Only allow zero or positive floating point numbers
+        newValue = Math.round(newValue * 10) / 10;
+        // Ensure the value is not negative or NaN
         if (isNaN(newValue) || newValue < 0) newValue = 0;
-        dataValues[i].unshift(newValue);
-        if (dataValues[i].length > 60) dataValues[i] = dataValues[i].slice(0, 60);
+        rateValues.push(newValue);
       }
 
-      // Add new time label at the start (for autoscaling phase)
-      xLabels.unshift(counter);
-      if (xLabels.length > 60) xLabels = xLabels.slice(0, 60);
-      counter++;
-
-      if (xLabels.length < 60) {
-        // If fewer than 60 points, let Chart.js autoscale the x-axis
-        window.myChart.data.labels = xLabels; // Use the current labels array for the x-axis
-        window.myChart.options.scales.x.min = undefined; // Remove fixed min so Chart.js can autoscale
-        window.myChart.options.scales.x.max = undefined; // Remove fixed max so Chart.js can autoscale
-      } else {
-        // Once we have 60 or more points, fix the x-axis range to always show 0-59
-        window.myChart.data.labels = Array.from({length: 60}, (_, i) => i); // Set labels to 0-59
-        window.myChart.options.scales.x.min = 0; // Fix the minimum x value
-        window.myChart.options.scales.x.max = 59; // Fix the maximum x value
-      }
-
-      // --- AUTOSCALE Y AXIS AFTER INITIALIZATION ---
-      if (xLabels.length > 1) {
-        // Let Chart.js autoscale the y-axis based on the data,
-        // but do not allow the minimum y value to go below zero
-        window.myChart.options.scales.y.min = 0;
-        window.myChart.options.scales.y.max = undefined;
-      }
-
-      // Update each dataset with the latest data
-      for (let i = 0; i < dataValues.length; i++) {
-        window.myChart.data.datasets[i].data = dataValues[i]; // Update the chart's data for each trace
-      }
-
-      window.myChart.update('none'); // Redraw the chart with new data, none eliminates animation
-      //window.myChart.update(); // Redraw the chart with new data, none eliminates animation
-
-      // Optional: Auto-scroll to the start (left) for smooth effect
-      const container = document.querySelector('.chart-container'); // Get the chart container element
-      container.scrollLeft = 0; // Scroll to the leftmost position
+      // Pass the simulated rate values to the unified chart update function
+      updateChartWithRates(rateValues);
     }
 
     // --- CHART UPDATE FUNCTION FROM XML DATA ---
     // Updates the chart with new data from the <RATES> XML tag.
     // Call this from your response() function after receiving new XML data.
     function updateChartFromRatesXML(xmlResponse) {
+      // Exit if the chart is not initialized
       if (!window.myChart) return;
 
-      // Extract the <RATES> tag from the XML response
+      // Get the <RATES> tag from the XML response
       const ratesTag = xmlResponse.getElementsByTagName("RATES");
       let rateValues;
+
+      // If <RATES> tag is missing or empty, use zeros as fallback
       if (!ratesTag || ratesTag.length === 0) {
-        // No <RATES> tag found, use zeros
         rateValues = [0, 0, 0, 0];
       } else {
-        // Get the comma-separated string of rates from the tag
+        // Extract the comma-separated string from the <RATES> tag
         const ratesString = ratesTag[0].textContent || ratesTag[0].firstChild.nodeValue;
-        if (!ratesString) return;
+        if (!ratesString) return; // If the tag is empty, exit
+        // Split the string into an array and parse each value as a float
+        // Replace invalid or negative values with 0
         rateValues = ratesString.split(',').map(val => {
           let f = parseFloat(val);
           return (isNaN(f) || f < 0) ? 0 : f;
         });
       }
 
+      // Pass the parsed rate values to the unified chart update function
+      updateChartWithRates(rateValues);
+    }
+
+    function updateChartWithRates(rateValues) {
       // For each trace (Strike, Disturber, Noise, Purge):
+      // Insert the new value at the start of the array (most recent on the left)
+      // Keep only the most recent 60 values for each trace
       for (let i = 0; i < dataValues.length; i++) {
-        dataValues[i].unshift(rateValues[i] || 0);
-        if (dataValues[i].length > 60) dataValues[i].pop();
-        window.myChart.data.datasets[i].data = dataValues[i];
+        dataValues[i].unshift(rateValues[i] || 0); // Add new value or 0 if missing
+        if (dataValues[i].length > 60) dataValues[i].pop(); // Remove oldest if over 60
+        window.myChart.data.datasets[i].data = dataValues[i]; // Update chart dataset
       }
 
-      // Add a new label to the start of the xLabels array (using a counter)
+      // Add a new label (time/sample index) to the start of the xLabels array
+      // Keep only the most recent 60 labels
       xLabels.unshift(counter++);
       if (xLabels.length > 60) xLabels.pop();
 
       // --- X AXIS LOGIC ---
       if (xLabels.length < 60) {
-        // Autoscale: show all points
+        // If fewer than 60 points, use dynamic labels and let Chart.js autoscale x-axis
         window.myChart.data.labels = xLabels;
         window.myChart.options.scales.x.min = undefined;
         window.myChart.options.scales.x.max = undefined;
       } else {
-        // Fix to 60 points: always show 0–59
+        // Once 60 or more points, use fixed labels 0-59 and fix x-axis range
         window.myChart.data.labels = Array.from({length: 60}, (_, i) => i);
         window.myChart.options.scales.x.min = 0;
         window.myChart.options.scales.x.max = 59;
       }
 
       // --- Y AXIS LOGIC ---
+      // Always keep y-axis minimum at 0 (never show negative values)
+      // Let Chart.js autoscale the maximum
       window.myChart.options.scales.y.min = 0;
       window.myChart.options.scales.y.max = undefined;
 
+      // Update the chart without animation for real-time effect
       window.myChart.update('none');
 
-      // Optional: Auto-scroll to the start (left) for smooth effect
+      // Optional: Auto-scroll the chart container to the left (if scrollable)
       const container = document.querySelector('.chart-container');
       if (container) container.scrollLeft = 0;
     }
