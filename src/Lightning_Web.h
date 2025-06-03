@@ -9,7 +9,6 @@
 
 const char PAGE_MAIN[] PROGMEM = R"=====(
 <!DOCTYPE html>
-<!DOCTYPE html>
 <html lang="en" class="js-focus-visible">
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -279,7 +278,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     // ============================================= WEB PAGE ABOVE =================================================
 // *********************
 // 
-    let USE_SIMULATED_DATA = true; // Set to true to use simulated data for testing
+    let USE_SIMULATED_DATA = false; // Set to true to use simulated data for testing
 //
 // *********************
     // global variable visible to all java functions
@@ -340,9 +339,12 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     // let Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
     // let Strike_this_time = 0;
     function response() {
-      // implement an equiv to the old C style static variables, survives across function calls
-      response.Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
-      response.Strike_this_time = 0;
+      // implement an equiv to the old C style static variables, survives across function calls to avoid global variables
+      if (typeof response.Strike_last_strike_accumulator_value === "undefined") {
+        response.Strike_last_strike_accumulator_value = 0; // Only initialized once
+      }
+     // response.Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
+      let Strike_this_time = 0;
       var message;
       var barwidth;
       var currentsensor;
@@ -399,12 +401,12 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       // the following code is use to determine when to play the strike alarm tone
       // if the strike accumulator value is greater than the last strike accumulator value,
       // we have a new strike, so then play the strike alarm tone  
-      response.Strike_this_time = Number(message);
-      if( response.Strike_this_time > response.Strike_last_strike_accumulator_value) {
+      Strike_this_time = Number(message);
+      if( Strike_this_time > response.Strike_last_strike_accumulator_value) {
         if( ! USE_SIMULATED_DATA ) {
   //        playStrikeAlarm();  // finally, play the strike alarm tone, multiple tones, had issue with this when lots of strikes
             playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
-            response.Strike_last_strike_accumulator_value = response.Strike_this_time; // save the last strike accumulator value
+            response.Strike_last_strike_accumulator_value = Strike_this_time; // save the last strike accumulator value
           } else {
             TextLog(">SIMBEEP<"); // so i dont have to listen to the alarm tone when testing
             //playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
@@ -490,7 +492,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
             xmlHttp.onreadystatechange = response;
             xmlHttp.send(null);
         }
-        //if(!USE_SIMULATED_DATA)
+        if(!USE_SIMULATED_DATA)
           setTimeout("process()", 500); // Poll the server every 500ms
     }
 
@@ -687,21 +689,23 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     // Updates the chart with new data from the <RATES> XML tag.
     // Call this from your response() function after receiving new XML data.
     function updateChartFromRatesXML(xmlResponse) {
-      if (!window.myChart) return; // If chart not initialized, exit
+      if (!window.myChart) return;
 
       // Extract the <RATES> tag from the XML response
       const ratesTag = xmlResponse.getElementsByTagName("RATES");
-      if (!ratesTag || ratesTag.length === 0) return; // If no <RATES> tag found, exit
-
-      // Get the comma-separated string of rates from the tag
-      const ratesString = ratesTag[0].textContent || ratesTag[0].firstChild.nodeValue;
-      if (!ratesString) return; // If the tag is empty, exit
-
-      // Split the string into an array of floats and sanitize
-      const rateValues = ratesString.split(',').map(val => {
-        let f = parseFloat(val);
-        return (isNaN(f) || f < 0) ? 0 : f;
-      });
+      let rateValues;
+      if (!ratesTag || ratesTag.length === 0) {
+        // No <RATES> tag found, use zeros
+        rateValues = [0, 0, 0, 0];
+      } else {
+        // Get the comma-separated string of rates from the tag
+        const ratesString = ratesTag[0].textContent || ratesTag[0].firstChild.nodeValue;
+        if (!ratesString) return;
+        rateValues = ratesString.split(',').map(val => {
+          let f = parseFloat(val);
+          return (isNaN(f) || f < 0) ? 0 : f;
+        });
+      }
 
       // For each trace (Strike, Disturber, Noise, Purge):
       for (let i = 0; i < dataValues.length; i++) {
@@ -731,7 +735,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
 
       // Optionally autoscale the y-axis after initialization
       if (xLabels.length > 1) {
-        window.myChart.options.scales.y.min = undefined;
+        window.myChart.options.scales.y.min = 0;
         window.myChart.options.scales.y.max = undefined;
       }
 
@@ -744,4 +748,6 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     }
 </script>
 </html>
+
+
 )=====";
