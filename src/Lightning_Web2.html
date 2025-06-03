@@ -706,35 +706,30 @@
 
       // Add a new label to the start of the xLabels array (using a counter)
       xLabels.unshift(counter++);
-      
-      // Keep only the latest 60 labels
       if (xLabels.length > 60) xLabels.pop();
-      
-      // Update the chart's x-axis labels
-      window.myChart.data.labels = xLabels;
 
-      // Optionally autoscale the x-axis: 
-      // If fewer than 60 points, let Chart.js autoscale; otherwise, fix the range to 0-59
+      // --- X AXIS LOGIC ---
       if (xLabels.length < 60) {
-        window.myChart.options.scales.x.min = 0;
+        // Autoscale: show all points
+        window.myChart.data.labels = xLabels;
+        window.myChart.options.scales.x.min = undefined;
         window.myChart.options.scales.x.max = undefined;
       } else {
+        // Fix to 60 points: always show 0–59
+        window.myChart.data.labels = Array.from({length: 60}, (_, i) => i);
         window.myChart.options.scales.x.min = 0;
         window.myChart.options.scales.x.max = 59;
       }
 
-      // Optionally autoscale the y-axis after initialization
-      if (xLabels.length > 1) {
-        window.myChart.options.scales.y.min = 0;
-        window.myChart.options.scales.y.max = undefined;
-      }
+      // --- Y AXIS LOGIC ---
+      window.myChart.options.scales.y.min = 0;
+      window.myChart.options.scales.y.max = undefined;
 
-      // Redraw the chart with the new data
-      window.myChart.update('none'); // 'none' eliminates animation for smoother updates
-      
+      window.myChart.update('none');
+
       // Optional: Auto-scroll to the start (left) for smooth effect
       const container = document.querySelector('.chart-container');
-      container.scrollLeft = 0;
+      if (container) container.scrollLeft = 0;
     }
 </script>
 </html>
