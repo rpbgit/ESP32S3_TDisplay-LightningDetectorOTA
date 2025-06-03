@@ -110,10 +110,11 @@ void elapsed_timer_display();
 extern void WebText(const char *format, ...);
 
 // Function prototype for power relay control
-void power_relay_set_reset(HostCmdEnum& command);    //Power On/Off Hardware function.
-void power_relay_control(bool power_state) ; // 
+void power_relay(bool on_off);    //Power On/Off Hardware function.  true for on, false for off
+void power_relay_fsm() ; // must run this on every loop() to manage the power relay state machine
 void stats_generation(int interrupt_source_register); 
 void manage_tft_power_field() ; // manage the power field on the TFT screen, green for on, red for off.
+void station_management(int interrupt_source, int distance, long energy, const statistics_struct& stats);
 
 // Function prototypes for command handlers
 void handleMotorCommand(char *param);
@@ -137,16 +138,18 @@ void handle_RESET_Command(char *param);
 void handle_CALOSC_Command(char *param);
 void handle_EVTDSBL_Command(char *param);
 void handle_CALMODE_Command(char *param);
+void handle_STRTRH_Command(char *param);  // strike threshold command, used to set the strike rate threshold for the station management
+void handle_PWRRQST_Command(char *param); // turn power on/off the station via commandline
 
 void sensor_register_test( char *param );
 void handle_DUMP_Command(char *param);
 void handle_HELP_Command(char *param);
 
 CommandEntry commandTable[] = {
-  {"afe",      handle_AFE_Command },
-  {"noise",    handle_Noise_Command },
-  {"doggy",    handle_DOGGY_Command },
-  {"spike",    handle_SPIKE_Command },
+    {"afe",      handle_AFE_Command },
+    {"noise",    handle_Noise_Command },
+    {"doggy",    handle_DOGGY_Command },
+    {"spike",    handle_SPIKE_Command },
   {"thresh",   handle_THRESH_Command },
   {"dist",     handle_DIST_Command },
   {"energy",   handle_ENERGY_Command },
@@ -162,6 +165,8 @@ CommandEntry commandTable[] = {
   {"inv",      handle_DISPLAYINVERT_Command },
   {"calant",   handle_CALANT_Command }, 
   {"calosc",   handle_CALOSC_Command },
+  {"strtrh",   handle_STRTRH_Command },
+  {"powreq",   handle_PWRRQST_Command },
 
   // put any new commands above this line so that the reset command doesnt recurse on itself or do help
   {"regtst",   sensor_register_test }, 
@@ -246,8 +251,14 @@ bool gEvents_Active_Flag = false;  // flag to indicate we have disable handling 
 
 RAS_HW_STATUS_STRUCT RAS_Status;
 RAS_HW_STATUS_STRUCT *pRas = &RAS_Status; // create a pointer to the RAS_STatus structure
+statistics_struct gStats = {0};
 
 extern unsigned long gLongest_loop_time;
+bool gPowerConditionRqst = false; // flag to indicate we have requested a power condition change, used by the power_relay_fsm() function
+
+// global variable used at the end of the station management placed here for testing
+unsigned long gStrikeRateThreshold = 5;  
+
 // declare the global structure and a pointer to it that is shared between the hardware handling done here
 // and the web page message population and status updates.  
 void get_hardware_status(RAS_HW_STATUS_STRUCT& myhw );
@@ -516,7 +527,9 @@ void loop2(HostCmdEnum & host_command)
 {
     int faked_event = PASSTHRU_INT;
     int fake_distance = 0;
+    int distance = 0; // distance to the storm in km, 0 means out of range
     long fake_energy = 0;
+    long lightEnergy = 0;
     int interrupt_reg_value = PASSTHRU_INT; // interrupt status register value from the AS3935
 
     static bool alm_display_state = true;
@@ -625,7 +638,7 @@ void loop2(HostCmdEnum & host_command)
                 tft.printf("Strikes:   %4d Last  %4d", stroke_accumulator, elapsed);
         
                 // Lightning! Now how far away is it? Distance estimation takes into account previously seen events.
-                int distance = Sensor.readStormDistance();
+                distance = Sensor.readStormDistance();
                 distance = gSimulated_Events ? fake_distance : distance;
 //Serial.printf("\tDistance: %d km\n", distance);
 
@@ -648,7 +661,7 @@ void loop2(HostCmdEnum & host_command)
                 } 
         
                 // "Lightning Energy" is a pure number without physical meaning
-                long lightEnergy = Sensor.readEnergy();
+                lightEnergy = Sensor.readEnergy();
                 lightEnergy = gSimulated_Events ? fake_energy : lightEnergy; //
 
                 tft.setCursor(5, 135, FONT_DEFAULT);
@@ -692,6 +705,9 @@ void loop2(HostCmdEnum & host_command)
     
     // generate rate stats
     stats_generation(interrupt_reg_value); // Pass the ISR value to the power management function
+    
+    // Call the station management function decide what to do with the station control/power management
+    station_management(interrupt_reg_value, distance, lightEnergy, gStats);
 
     // let commandparser handle any user input commands.
     cp.processInput();
@@ -730,23 +746,44 @@ void loop2(HostCmdEnum & host_command)
     // manage screen brightness with button 1
     manage_tft_brightness();
 
-    // manage the power field in the tft and keep it updated
+    // manage the power field display in the tft and keep it updated
     manage_tft_power_field();
 
     // handle the power relay control button 2 and the soft button on client
     if (now - relayLastToggle >= PWR_BUTTON_INTEGRATION_TIME ) {
         if(digitalRead(PIN_BUTTON_2) == LOW || host_command == HostCmdEnum::PWR_SELECT ) {
             relayState = !relayState;
-            power_relay_control(relayState); // Toggle the relay
+            power_relay(relayState); // Toggle the relay
             relayLastToggle = now;
         }
     }
 
     // Call the function periodically to process non-blocking transitions
-    power_relay_control(relayState);
+    power_relay_fsm();
 
     // we are done with this loop, reset the command to NO_OP
     host_command = HostCmdEnum::NO_OP;
+}
+
+constexpr bool OFF = false;
+constexpr bool ON = true;
+void station_management(int interrupt_source, int distance, long energy, const statistics_struct& stats)
+{
+    // You can read from stats, but cannot modify it
+    if (stats.strikeRate > 10.0f) {
+        // ...take some action...
+    }
+    // stats.strikeRate = 0; // <-- This would cause a compiler error!
+
+    // keep in mind, that the value for distance and energy is only valid if the interrupt source is LIGHTNING_INT
+    if( interrupt_source == LIGHTNING_INT ) {
+        // If we have a lightning strike, distance and energy are valid
+    }
+    
+    // If the strike rate is above a certain threshold, turn on the power relay
+    if (stats.strikeRate >= gStrikeRateThreshold) {
+        power_relay(OFF);
+    }
 }
 
 // Main station management function
@@ -759,7 +796,8 @@ void loop2(HostCmdEnum & host_command)
 // head: pointer to the head index (oldest event)
 // count: pointer to the current number of events in the buffer
 // now: current timestamp (millis)
-void add_event_timestamp(unsigned long *buf, int *head, int *count, unsigned long now) {
+void add_event_timestamp(unsigned long* buf, int* head, int* count, unsigned long now)
+{
     // Store the new timestamp at the next available position in the circular buffer
     buf[(*head + *count) % MAX_EVENT_TIMESTAMPS] = now;
     if (*count < MAX_EVENT_TIMESTAMPS) {
@@ -776,7 +814,8 @@ void add_event_timestamp(unsigned long *buf, int *head, int *count, unsigned lon
 // head: head index (oldest event)
 // count: current number of events in the buffer
 // cutoff: timestamps must be >= cutoff to be counted
-int count_events_in_window(unsigned long *buf, int head, int count, unsigned long cutoff) {
+int count_events_in_window(unsigned long *buf, int head, int count, unsigned long cutoff) 
+{
     int n = 0;
     for (int i = 0; i < count; ++i) {
         int idx = (head + i) % MAX_EVENT_TIMESTAMPS; // Calculate circular buffer index
@@ -807,7 +846,6 @@ int count_events_in_window(unsigned long *buf, int head, int count, unsigned lon
 void stats_generation(int interrupt_source_register)
 {
     // Static structure to hold all event counts, rates, and max rates
-    static statistics_struct stats = {0};
     unsigned long now = millis();
 
     // --- Sliding window buffers for event timestamps (now local static variables) ---
@@ -826,21 +864,21 @@ void stats_generation(int interrupt_source_register)
     // --- 1. Record event timestamps in circular buffers ---
     switch (interrupt_source_register) {
         case LIGHTNING_INT:
-            stats.strikeCount++;
+            gStats.strikeCount++;
             add_event_timestamp(strikeTimestamps, &strikeHead, &strikeCountInBuf, now);
             break;
         case DISTURBER_INT:
-            stats.disturberCount++;
+            gStats.disturberCount++;
             add_event_timestamp(disturberTimestamps, &disturberHead, &disturberCountInBuf, now);
             break;
         case NOISE_INT:
-            stats.noiseCount++;
+            gStats.noiseCount++;
             add_event_timestamp(noiseTimestamps, &noiseHead, &noiseCountInBuf, now);
             break;
         case PASSTHRU_INT:
             break;
         default:
-            stats.purgeCount++;
+            gStats.purgeCount++;
             add_event_timestamp(purgeTimestamps, &purgeHead, &purgeCountInBuf, now);
             break;
     }
@@ -861,16 +899,16 @@ void stats_generation(int interrupt_source_register)
         int purges = count_events_in_window(purgeTimestamps, purgeHead, purgeCountInBuf, cutoff);
 
         float windowMinutes = (float)RATE_WINDOW_SECONDS / 60.0f;
-        stats.strikeRate = strikes / windowMinutes;
-        stats.disturberRate = disturbers / windowMinutes;
-        stats.noiseRate = noises / windowMinutes;
-        stats.purgeRate = purges / windowMinutes;
+        gStats.strikeRate = strikes / windowMinutes;
+        gStats.disturberRate = disturbers / windowMinutes;
+        gStats.noiseRate = noises / windowMinutes;
+        gStats.purgeRate = purges / windowMinutes;
 
         // Track max rates for each event type
-        if (stats.strikeRate    > stats.maxStrikeRate)    stats.maxStrikeRate    = stats.strikeRate;
-        if (stats.disturberRate > stats.maxDisturberRate) stats.maxDisturberRate = stats.disturberRate;
-        if (stats.noiseRate     > stats.maxNoiseRate)     stats.maxNoiseRate     = stats.noiseRate;
-        if (stats.purgeRate     > stats.maxPurgeRate)     stats.maxPurgeRate     = stats.purgeRate;
+        if (gStats.strikeRate    > gStats.maxStrikeRate)    gStats.maxStrikeRate    = gStats.strikeRate;
+        if (gStats.disturberRate > gStats.maxDisturberRate) gStats.maxDisturberRate = gStats.disturberRate;
+        if (gStats.noiseRate     > gStats.maxNoiseRate)     gStats.maxNoiseRate     = gStats.noiseRate;
+        if (gStats.purgeRate     > gStats.maxPurgeRate)     gStats.maxPurgeRate     = gStats.purgeRate;
 
         if (firstRateUpdate == 0) firstRateUpdate = now;
         rateUpdateCount++;
@@ -881,41 +919,41 @@ void stats_generation(int interrupt_source_register)
     static unsigned long lastWebPrint = 0;
     const unsigned long WEB_PRINT_INTERVAL_MS = 10000; // 10 seconds
 
-    bool anyRateNonZero = (stats.strikeRate != 0.0f) || (stats.disturberRate != 0.0f) || (stats.noiseRate != 0.0f) || (stats.purgeRate != 0.0f);
+    bool anyRateNonZero = (gStats.strikeRate != 0.0f) || (gStats.disturberRate != 0.0f) || (gStats.noiseRate != 0.0f) || (gStats.purgeRate != 0.0f);
 
     // Store summation of previous rates to detect changes
     static float prevStrikeRate = -1.0f, prevDisturberRate = -1.0f, prevNoiseRate = -1.0f, prevPurgeRate = -1.0f;
     
     // Check if rates have changed since last print
     bool ratesChanged =
-        (stats.strikeRate    != prevStrikeRate)    ||
-        (stats.disturberRate != prevDisturberRate) ||
-        (stats.noiseRate     != prevNoiseRate)     ||
-        (stats.purgeRate     != prevPurgeRate);
+        (gStats.strikeRate    != prevStrikeRate)    ||
+        (gStats.disturberRate != prevDisturberRate) ||
+        (gStats.noiseRate     != prevNoiseRate)     ||
+        (gStats.purgeRate     != prevPurgeRate);
 
     if (ratesChanged && (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL ) {
         if(anyRateNonZero) {
             WebText(
                 "SM Rates: strike (%.1f/min), disturber (%.1f/min), noise (%.1f/min), purge (%.1f/min) 7, 7, 7, 7,\n",
-                stats.strikeRate, stats.disturberRate, stats.noiseRate, stats.purgeRate
+                gStats.strikeRate, gStats.disturberRate, gStats.noiseRate, gStats.purgeRate
             );
         } else 
             WebText("SM Rates are now zero. 0 0 0 0 0 0 0 0 \n");
         
         WebText( "\tMax Rate: strike %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
-                    stats.maxStrikeRate, stats.maxDisturberRate, stats.maxNoiseRate, stats.maxPurgeRate );
+                    gStats.maxStrikeRate, gStats.maxDisturberRate, gStats.maxNoiseRate, gStats.maxPurgeRate );
     }
     // Update previous rates to detect change
-    prevStrikeRate     = stats.strikeRate;
-    prevDisturberRate  = stats.disturberRate;
-    prevNoiseRate      = stats.noiseRate;
-    prevPurgeRate      = stats.purgeRate;
+    prevStrikeRate     = gStats.strikeRate;
+    prevDisturberRate  = gStats.disturberRate;
+    prevNoiseRate      = gStats.noiseRate;
+    prevPurgeRate      = gStats.purgeRate;
 
     // finally, update the RAS_Status structure with the latest statistics to xmit to the web interface
-    RAS_Status.strikeRate     = stats.strikeRate;
-    RAS_Status.disturberRate  = stats.disturberRate;       
-    RAS_Status.noiseRate      = stats.noiseRate;
-    RAS_Status.purgeRate      = stats.purgeRate;
+    RAS_Status.strikeRate     = gStats.strikeRate;
+    RAS_Status.disturberRate  = gStats.disturberRate;       
+    RAS_Status.noiseRate      = gStats.noiseRate;
+    RAS_Status.purgeRate      = gStats.purgeRate;
 }
 
 // manage the tft power field display by reading the RELAY_SENSE_STATE GPIO pin, encapsulate it here if how we do so changes.
@@ -935,24 +973,37 @@ void manage_tft_power_field()
     last = bPowerState;  // save the current state for next time around.
 }
 
+
+void power_relay(bool on_off)    //Power On/Off Hardware function.  true for on, false for off
+{
+    gPowerConditionRqst = on_off; // set the global request variable to the requested state
+}
 // jack implemented a latching relay pair config setup as latching for the power relay, so we need to pulse it to set/reset it.  
 // This function does this in a non-blocking way.
 // it also supports the simulator mode such that in the absence of the relay hardware, it will simulate the relay state.
 // it does this by setting the RELAY_SENSE_STATE GPIO to an output and setting it to HIGH when the relay is ON, and LOW when OFF.
 // fortunately, the ESP32 GPIO pin implementations allow reading the state of a GPIO pin that is config'd as an OUTPUT.
-void power_relay_control(bool power_condition_rqst) {
+// this function must be called periodically from the loop2() function, and it will manage the FSM and relay state transitions
+void power_relay_fsm() 
+{
     // Static variables to hold state and timing
     static enum { IDLE, TURNING_ON, TURNING_OFF } sm_State = IDLE;
     static unsigned long relayTimer = 0;
     static bool currentPowerState = false;
     unsigned long currentTime = millis();
+    static bool firstRun = true;
+
+    if(firstRun) {
+        currentPowerState = digitalRead(RELAY_SENSE_STATE); // set the initial state of the PWR_Button based on what is read from the GPIO pin
+        firstRun = false; // Set firstRun to false after the initial read, this only happens once
+    }  
 
     switch (sm_State) {
         case IDLE:
-            if (power_condition_rqst != currentPowerState) { // Start only if state changes
+            if (gPowerConditionRqst != currentPowerState) { // Start only if state changes
                 relayTimer = currentTime;
-                currentPowerState = power_condition_rqst;
-                if (power_condition_rqst) {
+                currentPowerState = gPowerConditionRqst;
+                if (gPowerConditionRqst) {
 #ifdef SIMULATE_HARDWARE_MODE
                     digitalWrite(RELAY_SENSE_STATE, HIGH); // to Simulate turning relay ON we read the RELAY_SENSE_STATE pin as the relay state
 #endif
@@ -1328,6 +1379,23 @@ void handle_GETMAXLOOPTIME_Comnmand(char *param)
     } 
     WebText("\t- maximum loop() execution time is %d\n", gLongest_loop_time);
 };
+
+void handle_STRTRH_Command(char* param){
+    if (param != NULL) {
+        gStrikeRateThreshold = cp.parseParameter(param); // if i have a parameter, use it to assign it
+    }
+    WebText("\t- Strike Rate Threshold = %d\n", gStrikeRateThreshold);
+}
+
+void handle_PWRRQST_Command(char *param) // turn power on/off the station via commandline
+{
+    bool val;
+    if (param != NULL) {
+        val = cp.parseParameter(param); // if i have a parameter, use it to assign it
+        power_relay(val);
+    }
+    WebText("\t- Power status is = %s\n", digitalRead(RELAY_SENSE_STATE) ? "ON" : "OFF" );
+}
 
 void handle_HELP_Command(char *param) {
   if (param == NULL) {
