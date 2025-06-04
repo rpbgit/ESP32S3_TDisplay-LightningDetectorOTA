@@ -758,9 +758,10 @@ void loop2(HostCmdEnum & host_command)
     manage_tft_power_field();
 
     // handle the power relay control button 2 and the soft button on client
-    if (now - relayLastToggle >= PWR_BUTTON_INTEGRATION_TIME ) {
-        if(digitalRead(PIN_BUTTON_2) == LOW || host_command == HostCmdEnum::PWR_SELECT ) {
-            power_relay( !power_relay_get_state() ); // Toggle the relay
+    if (now - relayLastToggle >= PWR_BUTTON_INTEGRATION_TIME) {
+        if (digitalRead(PIN_BUTTON_2) == LOW || host_command == HostCmdEnum::PWR_SELECT) {
+            power_relay(!power_relay_get_state()); // Toggle the relay
+            relayLastToggle = now; // Update the last toggle time
         }
     }
 
