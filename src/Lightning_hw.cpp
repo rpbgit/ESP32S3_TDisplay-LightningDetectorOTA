@@ -117,6 +117,7 @@ extern void WebText(const char *format, ...);
 // Function prototype for power relay control
 void power_relay(bool on_off);    //Power On/Off Hardware function.  true for on, false for off
 void power_relay_fsm() ; // must run this on every loop() to manage the power relay state machine
+bool power_relay_get_state(); // get the current state of the power relay, true for on, false for off
 void stats_generation(int interrupt_source_register); 
 void manage_tft_power_field() ; // manage the power field on the TFT screen, green for on, red for off.
 void station_management(int interrupt_source, int distance, long energy, const statistics_struct& stats);
@@ -259,7 +260,7 @@ RAS_HW_STATUS_STRUCT *pRas = &RAS_Status; // create a pointer to the RAS_STatus 
 statistics_struct gStats = {0};
 
 extern unsigned long gLongest_loop_time;
-bool gPowerConditionRqst = false; // flag to indicate we have requested a power condition change, used by the power_relay_fsm() function
+bool gPowerCondition = false; // flag to indicate we have requested a power condition change, used by the power_relay_fsm() function
 
 // global variable used at the end of the station management placed here for testing
 unsigned long gStrikeRateThreshold = 5;  
@@ -303,6 +304,9 @@ void setup2()
 	digitalWrite(RELAY_RESET,HIGH);  // Pulse the relay reset pin HIGH
 	delay(50);                     //DELAY IT
 	digitalWrite(RELAY_RESET,LOW);    // Set Relay reset pin LOW again
+
+    // set the initial state of the power on boot whatever the relay sense state is.
+    gPowerCondition = digitalRead(RELAY_SENSE_STATE);
 
     randomSeed(1234L);  // seed the random number generator for simulator events
 
@@ -546,7 +550,6 @@ void loop2(HostCmdEnum & host_command)
 
     // these are used to debounce the button press and to prevent the relay from oscillating
     static unsigned long relayLastToggle = 0;
-    static bool relayState = PWR_OFF;
 
     if(gSimulated_Events) {
         if( now - last_event >= gSimulated_Events ) {  // every FAKED_DATA_INTERVAL seconds we "might" generate an event
@@ -757,9 +760,7 @@ void loop2(HostCmdEnum & host_command)
     // handle the power relay control button 2 and the soft button on client
     if (now - relayLastToggle >= PWR_BUTTON_INTEGRATION_TIME ) {
         if(digitalRead(PIN_BUTTON_2) == LOW || host_command == HostCmdEnum::PWR_SELECT ) {
-            relayState = !relayState;
-            power_relay(relayState); // Toggle the relay
-            relayLastToggle = now;
+            power_relay( !power_relay_get_state() ); // Toggle the relay
         }
     }
 
@@ -774,26 +775,38 @@ constexpr bool OFF = false;
 constexpr bool ON = true;
 void station_management(int interrupt_source, int distance, long energy, const statistics_struct& stats)
 {
-    // You can read from stats, but cannot modify it
-    if (stats.strikeRate > 10.0f) {
-        // ...take some action...
-    }
-    // stats.strikeRate = 0; // <-- This would cause a compiler error!
+    // Static variables to track power-off request and timing
+    static bool powerOffRequested = false;
+    static unsigned long lastBelowThresholdTime = 0;
+    static const unsigned long REARM_DELAY_MS = 30000; // 30 seconds
 
+    unsigned long now = millis();
+
+    // Only the actual stats are kept in the struct; the sliding window buffers are now local static variables.
     // keep in mind, that the value for distance and energy is only valid if the interrupt source is LIGHTNING_INT
-    if( interrupt_source == LIGHTNING_INT ) {
+    if (interrupt_source == LIGHTNING_INT) {
         // If we have a lightning strike, distance and energy are valid
     }
-    
-    // If the strike rate is above a certain threshold, turn on the power relay
+
+    // If the strike rate is above the threshold, request power off only once
     if (stats.strikeRate >= gStrikeRateThreshold) {
-        power_relay(OFF);
+        if (!powerOffRequested) {
+            power_relay(OFF);
+            powerOffRequested = true;
+            WebText("\n>>>>> Strike rate above threshold (%d), requesting power off. <<<<<\n", gStrikeRateThreshold);
+        }
+        // Reset the timer since we're still above threshold
+        lastBelowThresholdTime = now;
+    } else {
+        // If we just dropped below threshold, start/restart the timer
+        if (powerOffRequested && (now - lastBelowThresholdTime >= REARM_DELAY_MS)) {
+            powerOffRequested = false; // Allow another power off after 30s below threshold
+            WebText("\n>>>>> Strike rate below threshold, rearming power off request. <<<<<\n");
+        }
     }
 }
 
 // Main station management function
-// relayState: reference to relay state variable
-// isr: interrupt source register value (event type)
 #define MAX_EVENT_TIMESTAMPS 64
 
 // Helper function to add an event timestamp to a circular buffer
@@ -978,10 +991,17 @@ void manage_tft_power_field()
     last = bPowerState;  // save the current state for next time around.
 }
 
-
+bool power_relay_get_state() 
+{
+    // This function returns the current power state of the relay
+    // It reads the RELAY_SENSE_STATE GPIO pin to determine if the relay is ON or OFF
+    //return digitalRead(RELAY_SENSE_STATE);
+    // or the state of the global variable gPowerCondition
+    return gPowerCondition; // this is the state of the power relay, which is set by the power_relay() function  
+}
 void power_relay(bool on_off)    //Power On/Off Hardware function.  true for on, false for off
 {
-    gPowerConditionRqst = on_off; // set the global request variable to the requested state
+    gPowerCondition = on_off; // set the global request variable to the requested state
 }
 // jack implemented a latching relay pair config setup as latching for the power relay, so we need to pulse it to set/reset it.  
 // This function does this in a non-blocking way.
@@ -1005,10 +1025,10 @@ void power_relay_fsm()
 
     switch (sm_State) {
         case IDLE:
-            if (gPowerConditionRqst != currentPowerState) { // Start only if state changes
+            if (gPowerCondition != currentPowerState) { // Start only if state changes
                 relayTimer = currentTime;
-                currentPowerState = gPowerConditionRqst;
-                if (gPowerConditionRqst) {
+                currentPowerState = gPowerCondition;
+                if (gPowerCondition) {
 #ifdef SIMULATE_HARDWARE_MODE
                     digitalWrite(RELAY_SENSE_STATE, HIGH); // to Simulate turning relay ON we read the RELAY_SENSE_STATE pin as the relay state
 #endif
@@ -1256,7 +1276,8 @@ void handle_EVTDSBL_Command(char *param)
 {
     if (param != NULL) {
         long regvalue = cp.parseParameter(param);
-        regvalue > 0 ? gEvents_Active_Flag = false : gEvents_Active_Flag = true;
+        gEvents_Active_Flag = gEvents_Active_Flag ? false : true; // toggle the flag
+        //regvalue > 0 ? gEvents_Active_Flag = false : gEvents_Active_Flag = true;
     } 
     WebText("\t- Events are %s\n", gEvents_Active_Flag ? "Enabled" : "Disabled");
 }
