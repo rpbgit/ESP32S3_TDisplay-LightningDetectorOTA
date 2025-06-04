@@ -197,7 +197,7 @@ AS3935SPI Sensor(SS, DetectorIntrReqPin); // constructor needs chipselect and in
 #define PWR_ON true
 #define PWR_OFF false
 
-#define PWR_BUTTON_INTEGRATION_TIME 1000  // 1 second
+#define PWR_BUTTON_INTEGRATION_TIME 750  // time in milliseconds to wait for the power button to be pressed before toggling the power state
 
 /*
 14-Feb-2025 w9zv    this is now in a compiler define file so that it always compiles with the correct setting.
@@ -758,11 +758,18 @@ void loop2(HostCmdEnum & host_command)
     manage_tft_power_field();
 
     // handle the power relay control button 2 and the soft button on client
+    // - The relay toggles only on the **transition** from not-pressed to pressed (button down event), not while the button is held.
+    // - Holding the button down will not trigger repeated toggles.
+    // - The soft button (`PWR_SELECT`) still works as before.
+    static bool button2WasPressed = false; // Tracks if button was pressed in previous loop
     if (now - relayLastToggle >= PWR_BUTTON_INTEGRATION_TIME) {
-        if (digitalRead(PIN_BUTTON_2) == LOW || host_command == HostCmdEnum::PWR_SELECT) {
+        bool button2Pressed = (digitalRead(PIN_BUTTON_2) == LOW);
+        if ((button2Pressed && !button2WasPressed) || host_command == HostCmdEnum::PWR_SELECT) {
+            // Only toggle relay if button2 was just pressed (not held), or if soft button pressed
             power_relay(!power_relay_get_state()); // Toggle the relay
             relayLastToggle = now; // Update the last toggle time
         }
+        button2WasPressed = button2Pressed; // Update state for next loop
     }
 
     // Call the function periodically to process non-blocking transitions
@@ -1340,7 +1347,7 @@ void handle_CALANT_Command(char *param)
                 WebText("\t- Antenna calibration successful reg value is : %#04x or %02d pf resonant frequency is %d Hz\n", temp, temp * 8, frequency  ); 
             } else {
                 WebText("\t- Antenna Calibration failed\n");
-            }
+                       }
         }
     } else {
         WebText("\t- Auto-Calibrate antenna resonance - nothing done, non-zero parameter value to initiate\n");
