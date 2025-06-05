@@ -150,11 +150,6 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         line-height: 20px;
     }
 
-    .container {
-        max-width: 800;
-        margin: 0 auto;
-    }
-
     .button {
         font-weight: bold;
         border-radius: 5px
@@ -269,16 +264,14 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     <!-- buttons start here -->
     <div class="volume-control-container">
     <input type="button" class="button" id="PWR_Select" name="PWR_Select" value="POWER"
-        onclick="RadiosGrpButtonPress(this.id)">
+        onclick="PowerButtonHandler(this.id)">
 
     <input type="button" class="button" id="R2Select" name="Radio2" value="Test"
-        onclick="playAlarm(600, 250, 'triangle')">
-    <!-- <input type="button" class="button" id="R2Select" name="Radio2" value="Test"
-        onclick="playStrikeAlarm()"> -->
+        onclick="TestButtonHandler(this.id)">
 
     <!-- Volume Slider -->
         <label for="volume">Strike Alarm Volume:</label>
-        <input type="range" id="volume" min="0" max=".8" step="0.002" value="0.1">
+        <input type="range" id="volume" min="0" max=".1" step="0.02" value="0.02">
     </div>
     <hr>
     <!-- end of buttons/sliders -->
@@ -326,7 +319,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     <footer div class="foot" id="Chincey">THIS IS A TEST FOOTER</div>
     </footer>
 
-<script type="text/javascript">
+  <script type="text/javascript">
 // ============================================= WEB PAGE ABOVE =================================================
 // *********************
 // 
@@ -346,12 +339,15 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         }
         return xmlHttp;
     }
+
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
     // jscw library for Morse code playback    
     // At the top of your script, create a global instance:
     const morsePlayer = new jscw({
         "wpm": 30,
         "freq": 550, // tone frequency (Hz)
-        "volume": getVolume() // initial volume
+        "volume": .2 // initial volume
     });
 
     // --------------------- handle the terminal input ------------------------------      
@@ -373,8 +369,8 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     });
     // -----------------------------------------------------------      
 
-    //  handle a selection made of the Radios button group for the 4 radios
-    function RadiosGrpButtonPress(value) {
+    //  handle a selection made
+    function PowerButtonHandler(value) {
         console.log("Radio " + value);
         document.getElementById(value).style.backgroundColor = "#ffff00";
         var xhttp = new XMLHttpRequest();
@@ -382,12 +378,14 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         xhttp.send();
     }
 
-    function AllGndPress(value) {
-        console.log("AllGndPress " + value);
-        document.getElementById("ALL_GND").style.backgroundColor = "#ffff00";
-        var xhttp = new XMLHttpRequest();
-        xhttp.open("PUT", value, true); // send name of ALL Grounded button selected to server
-        xhttp.send();
+    function TestButtonHandler(value) {
+        console.log("TestButtonHandler " + value);
+        //playAlarm(600, 250, 'triangle');
+        playMorse("TEST"); // play TEST in morse code
+        //document.getElementById("value").style.backgroundColor = "#ffff00";
+        //var xhttp = new XMLHttpRequest();
+        //xhttp.open("PUT", value, true); // send name of ALL Grounded button selected to server
+        //xhttp.send();
     }
 
     // try to emulate an autoscrolling log using a text area
@@ -408,22 +406,22 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       }
      // response.Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
       let Strike_this_time = 0;
-      var message;
-      var barwidth;
-      var currentsensor;
-      var xmlResponse;
-      var dt = new Date();
-      var color = "#e8e8e8";
+      let message;
+      let barwidth;
+      let currentsensor;
+      let xmlResponse;
+      let date = new Date();
+      let color = "#e8e8e8";
 
       xmlResponse = xmlHttp.responseXML;
       if (xmlResponse == null) return;
 
-      document.getElementById("date").innerHTML = dt.toLocaleDateString('en-GB', {
+      document.getElementById("date").innerHTML = date.toLocaleDateString('en-GB', {
               day: '2-digit',
               month: 'short',
               year: 'numeric'
           }).replace(/ /g, '-').toUpperCase();
-      document.getElementById("time").innerHTML = dt.toLocaleTimeString();
+      document.getElementById("time").innerHTML = date.toLocaleTimeString();
 
       let xmldoc = xmlResponse.getElementsByTagName("INFO");
       try {
@@ -469,7 +467,8 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       if( Strike_this_time > response.Strike_last_strike_accumulator_value) {
         if( ! USE_SIMULATED_DATA ) {
   //        playStrikeAlarm();  // finally, play the strike alarm tone, multiple tones, had issue with this when lots of strikes
-            playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
+            playMorse("SOS"); // play SOS in morse code
+            //playAlarm(400, 250, 'triangle') ; // play a single strike tone, 400hz for 250ms
             response.Strike_last_strike_accumulator_value = Strike_this_time; // save the last strike accumulator value
           } else {
             TextLog(">SIMBEEP<"); // so i dont have to listen to the alarm tone when testing
@@ -506,7 +505,6 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     }
     
     function playStrikeAlarm() {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
         TextLog("playStrikeAlarm() called...\n");
@@ -530,25 +528,31 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
 
     // Function to play Morse code using the jscw library
     function playMorse(text) {
-    morsePlayer.setVolume(getVolume()); // update volume if needed
-    morsePlayer.setText(text);          // set the text to play
-    morsePlayer.play();
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+
+        let vol = getVolume();
+        morsePlayer.setVolume(vol);
+        morsePlayer.setText(text);
+        morsePlayer.play();
+        TextLog("Playing Morse: " + text + " vol " + vol);
     }
 
     function playAlarm(frequency, duration, type) {
-      playMorse("SOS"); // Play "73" in Morse code 
-      return;
-     // Initialize player with desired settings
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        oscillator.type = type;
-        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-        gainNode.gain.value = getVolume();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + duration / 1000);
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      // Initialize player with desired settings
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+      gainNode.gain.value = getVolume();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + duration / 1000);
     }
 
     function OnMyFormLoad() {
@@ -586,30 +590,30 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     ];
 
     // Counter for generating new time points
-    var counter = 4;
-
-    const colors = [
-      '#569CD6', // blue (Strike)
-      '#D7BA7D', // yellow (Disturber)
-      '#C586C0', // purple (Noise)
-      '#9CDCFE'  // cyan (Purge)
-    ];
-    // const colors = [
-          // Accent colors for each trace (high contrast)
-    //   '#FF3333', // red (Strike)
-    //   '#FFD700', // gold/yellow (Disturber)
-    //   '#33B5FF', // bright blue (Noise)
-    //   '#00FF99'  // bright green/cyan (Purge)
-    // ];
-
-    // Human-friendly names for each trace
-    const traceNames = ['Strike', 'Disturber', 'Noise', 'Purge'];
-
+    let counter = 4;
+    
+    // This function initializes the chart when the DOM is fully loaded.
     // Wait until the DOM is fully loaded before running this function.
     // This ensures that all HTML elements (like the canvas for the chart) are available.
     document.addEventListener("DOMContentLoaded", function() {
       // Get the 2D drawing context from the canvas element with id 'myChart'
       const ctx = document.getElementById('myChart').getContext('2d');
+      const colors = [
+        '#569CD6', // blue (Strike)
+        '#D7BA7D', // yellow (Disturber)
+        '#C586C0', // purple (Noise)
+        '#9CDCFE'  // cyan (Purge)
+      ];
+      // const colors = [
+            // Accent colors for each trace (high contrast)
+      //   '#FF3333', // red (Strike)
+      //   '#FFD700', // gold/yellow (Disturber)
+      //   '#33B5FF', // bright blue (Noise)
+      //   '#00FF99'  // bright green/cyan (Purge)
+      // ];
+
+      // Human-friendly names for each trace
+      const traceNames = ['Strike', 'Disturber', 'Noise', 'Purge'];
 
       // Create a new Chart.js line chart and assign it to a global variable for later updates
       window.myChart = new Chart(ctx, {
@@ -621,8 +625,8 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
             data: arr,                             // Initial data for this trace
             borderColor: colors[i],                // Line color
             backgroundColor: colors[i] + '33',     // 20% opacity fill under line
-            cubicInterpolationMode: 'default',     // Smoother lines (can use 'monotone')
-            tension: 0.25                          // Line tension for smoothness
+            cubicInterpolationMode: 'monotone',    // Smoother lines (can use 'monotone')
+            tension: 0.1                           // Line tension for smoothness
           }))
         },
         options: {
@@ -731,7 +735,14 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     // --- CHART UPDATE FUNCTION FROM XML DATA ---
     // Updates the chart with new data from the <RATES> XML tag.
     // Call this from your response() function after receiving new XML data.
+    // Add this global to track last chart update time
+    let lastChartUpdateTime = 0;
     function updateChartFromRatesXML(xmlResponse) {
+      // Only update once per minute
+      const now = Date.now();
+      if (now - lastChartUpdateTime < 60000) return; // 60000 ms = 1 minute
+      lastChartUpdateTime = now;
+
       // Exit if the chart is not initialized
       if (!window.myChart) return;
 
