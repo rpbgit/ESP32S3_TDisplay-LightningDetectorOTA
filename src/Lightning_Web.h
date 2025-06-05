@@ -8,6 +8,7 @@
 // again I hate strings, so char is it and this method let's us write naturally
 
 const char PAGE_MAIN[] PROGMEM = R"=====(
+
 <!DOCTYPE html>
 <html lang="en" class="js-focus-visible">
 <head>
@@ -15,6 +16,8 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
   <title>Lightning Detector & Rate Chart</title>
   <!-- Chart.js for real-time charting -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- CW morse code library -->
+  <script src="https://fkurz.net/ham/jscwlib/releases/jscwlib-0.3.0.js"></script>
   <style>
     /* Chart.js and dark theme styles from ratechart.html */
     html, body {
@@ -275,7 +278,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
 
     <!-- Volume Slider -->
         <label for="volume">Strike Alarm Volume:</label>
-        <input type="range" id="volume" min="0" max=".1" step="0.002" value="0.02">
+        <input type="range" id="volume" min="0" max=".8" step="0.002" value="0.1">
     </div>
     <hr>
     <!-- end of buttons/sliders -->
@@ -324,7 +327,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     </footer>
 
 <script type="text/javascript">
-    // ============================================= WEB PAGE ABOVE =================================================
+// ============================================= WEB PAGE ABOVE =================================================
 // *********************
 // 
     let USE_SIMULATED_DATA = false; // Set to true to use simulated data for testing
@@ -343,6 +346,14 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         }
         return xmlHttp;
     }
+    // jscw library for Morse code playback    
+    // At the top of your script, create a global instance:
+    const morsePlayer = new jscw({
+        "wpm": 30,
+        "freq": 550, // tone frequency (Hz)
+        "volume": getVolume() // initial volume
+    });
+
     // --------------------- handle the terminal input ------------------------------      
     document.getElementById('TermInput').addEventListener('keypress', function (event) {
         if (event.key === 'Enter') {
@@ -350,6 +361,9 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
 
             // Get the command typed by the user
             const command = document.getElementById('TermInput').value;
+            morsetext = command.replace("CMD> ", ""); // remove the prompt from the command
+            morsetext = morsetext.replace(":", ' ')
+            playMorse(morsetext); // play the command in morse code
             var xhttp = new XMLHttpRequest();
             xhttp.open("PUT", 'TermInput', true); // send name of radio button selected to server
             xhttp.send(command.substring(5)); // only send the command not the prompt
@@ -444,6 +458,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       message = xmldoc[0].firstChild.nodeValue;
       document.getElementById("DisturberET").value = message;
 
+
       xmldoc = xmlResponse.getElementsByTagName("STRIKE_ACC");
       message = xmldoc[0].firstChild.nodeValue;
       document.getElementById("StrikeAcc").value = message;
@@ -513,8 +528,18 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         }, 2000);
     }
 
+    // Function to play Morse code using the jscw library
+    function playMorse(text) {
+    morsePlayer.setVolume(getVolume()); // update volume if needed
+    morsePlayer.setText(text);          // set the text to play
+    morsePlayer.play();
+    }
+
     function playAlarm(frequency, duration, type) {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      playMorse("SOS"); // Play "73" in Morse code 
+      return;
+     // Initialize player with desired settings
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
         oscillator.type = type;
