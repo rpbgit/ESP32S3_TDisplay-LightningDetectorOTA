@@ -17,13 +17,24 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     /* Chart.js and dark theme styles from ratechart.html */
-    body {
-      background: #1e1e1e;
-      color: #d4d4d4;
-      margin: 0;
-      padding: 0;
-      overflow-y: auto;
+    html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
     }
+
+    body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+    }
+
+    .main-content {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+    }
+
     .chart-container {
       width: calc(100vw - 16px);
       height: 30vh;
@@ -40,7 +51,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       padding-top: 0;
       padding-bottom: 0;
       overflow: hidden;
-      margin: 16px auto;
+      margin: 4px auto;
     }
     #myChart {
       width: 100% !important;
@@ -128,9 +139,9 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
 
     .foot {
         font-family: "Verdana", "Arial", sans-serif;
-        font-size: 20px;
+        font-size: 10px;
         position: relative;
-        height: 30px;
+        height: 20px;
         text-align: center;
         color: #0e0e0f;
         line-height: 20px;
@@ -156,20 +167,49 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     }
 
     .myDiv1 {
+        flex: 1 1 auto; /* This makes it fill the remaining space */
+        display: flex;
+        flex-direction: column;
         border-radius: 3px;
         margin: auto;
         border: 3px solid rgb(84, 230, 71);
         background-color: rgba(27, 27, 27, 0.473);
-        padding:2px;
+        padding: 2px;
+        width: 100%;
+        max-width: none;
+        overflow: hidden;
+        box-sizing: border-box;
+        height: auto; /* Remove any fixed height */
+         margin-top: 2px; /* Add a small space above the textbox */
     }
 
-    .termta {
-        border-radius: 3px;
-        width:100%;
-        max-width: 100%;
-        max-height: 99%;
+    .termta#Terminal,
+    .termta#TermInput {
+        width: 100%;           /* <-- fill container horizontally */
+        min-width: 0;          /* <-- allow shrinking in flexbox */
+        box-sizing: border-box;
+    }
+
+    .termta#Terminal {
+        flex: 1 1 auto;         /* Expands to fill available space */
+        resize: none;
+        min-height: 0;
+        width: 100%;
         background-color: rgba(48, 49, 48, 0.473);
         color: cyan;
+        border-radius: 3px;
+        box-sizing: border-box;
+    }
+
+    .termta#TermInput {
+        flex: 0 0 auto;         /* Fixed size at the bottom */
+        height: 2.2em;
+        resize: none;
+        margin-top: 2px;
+        width: 100%;
+        background-color: rgba(48, 49, 48, 0.473);
+        color: cyan;
+        border-radius: 3px;
         box-sizing: border-box;
     }
 
@@ -199,6 +239,14 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         align-items: center;
         gap: 5px;
     }
+
+    hr {
+    border: none;
+    border-top: 2px solid #293578; /* or any color you want */
+    margin:4px 0;
+    width: 100%;
+    background: transparent;
+}
   </style>
 </head>
 <body style="background-color: #7a8285" onload="OnMyFormLoad()">
@@ -265,7 +313,8 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     </div>
     <hr>
     <div class="myDiv1">
-        <textarea readonly class="termta" id="Terminal" name="Terminal" rows="10" cols="200"></textarea>
+        <!-- <textarea readonly class="termta" id="Terminal" name="Terminal" rows="10" cols="200"></textarea> -->
+        <textarea readonly class="termta" id="Terminal" name="Terminal" ></textarea>
         <textarea class="termta" id="TermInput" name="TermInput" rows="1" cols="200">CMD> </textarea>
     </div>
     <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
@@ -727,6 +776,5 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     }
 </script>
 </html>
-
 
 )=====";
