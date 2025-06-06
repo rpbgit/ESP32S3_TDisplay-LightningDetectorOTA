@@ -449,7 +449,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       try {
           if (xmldoc.length > 0 ){
               let message = xmldoc[0].firstChild.nodeValue.trim();
-              // TextLog(message);
+              TextLog(message);
               console.log(message);
           }
       } catch (e) {
