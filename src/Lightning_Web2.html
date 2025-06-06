@@ -372,7 +372,7 @@
                 var xhttp = new XMLHttpRequest();
                 xhttp.open("PUT", 'TermInput', true); // send name of radio button selected to server
                 xhttp.send(command.substring(5)); // only send the command not the prompt
-                TextLog(`XXXXXX sent: ${command}`);
+                Console.log(`http PUT sent: ${command}`);
             }
 
             document.getElementById('TermInput').value = 'CMD> ';  // leave a prompt behind
