@@ -349,9 +349,31 @@
             morsetext = command.replace("CMD> ", ""); // remove the prompt from the command
             morsetext = morsetext.replace(":", ' ')
             playMorse(morsetext); // play the command in morse code
-            var xhttp = new XMLHttpRequest();
-            xhttp.open("PUT", 'TermInput', true); // send name of radio button selected to server
-            xhttp.send(command.substring(5)); // only send the command not the prompt
+
+            // 05-June-2025 new feature to handle "update" command locally without server interaction
+            // This allows the user to change the chart update rate dynamically to between 1000ms and 60000ms
+            // and see the effect immediately without needing to reload the page or wait for the server response.
+            // --- Parse "update" command (case-insensitive) and adjust chart update rate ---
+            // Accepts "CMD> update", "CMD> update 4000", or "CMD> update:4000"
+            const updateMatch = command.match(/^CMD>\s*update(?:[\s:]+(\d+))?/i);
+            if (updateMatch) {
+                if (updateMatch[1]) {
+                    let newRate = parseInt(updateMatch[1], 10);
+                    // Clamp the value between 1000 and 60000
+                    newRate = Math.max(1000, Math.min(60000, newRate));
+                    chartUpdateRateInMs = newRate;
+                    TextLog(`Chart update rate has been changed to ${newRate} ms x-axis labels may not be useful`);
+                } else {
+                    TextLog(`Current chart update rate is ${chartUpdateRateInMs} ms`);
+                }
+                // Do not send to ESP32 server if this is a locally handled command
+            } else {
+                // If not a local/client command, forward to the server
+                var xhttp = new XMLHttpRequest();
+                xhttp.open("PUT", 'TermInput', true); // send name of radio button selected to server
+                xhttp.send(command.substring(5)); // only send the command not the prompt
+                TextLog(`XXXXXX sent: ${command}`);
+            }
 
             document.getElementById('TermInput').value = 'CMD> ';  // leave a prompt behind
         }
@@ -416,7 +438,7 @@
       try {
           if (xmldoc.length > 0 ){
               let message = xmldoc[0].firstChild.nodeValue.trim();
-              TextLog(message);
+              // TextLog(message);
               console.log(message);
           }
       } catch (e) {
@@ -728,10 +750,11 @@
     // Call this from your response() function after receiving new XML data.
     // Add this global to track last chart update time
     let lastChartUpdateTime = 0;
+    let chartUpdateRateInMs = 60000; // Update every 60 seconds
     function updateChartFromRatesXML(xmlResponse) {
       // Only update once per minute
       const now = Date.now();
-      if (now - lastChartUpdateTime < 60000) return; // 60000 ms = 1 minute
+      if (now - lastChartUpdateTime < chartUpdateRateInMs) return; // 60000 ms = 1 minute
       lastChartUpdateTime = now;
 
       // Exit if the chart is not initialized
