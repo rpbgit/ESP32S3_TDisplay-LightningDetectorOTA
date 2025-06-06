@@ -729,6 +729,9 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         } // <-- closes options
       }); // <-- closes new Chart
 
+      // Set initial footer value on page load
+      document.getElementById('Chincey').textContent = `Chart update rate: ${(chartUpdateRateInMs/1000).toFixed(1)} s`;
+
       // Optionally, you could start simulated data updates here after the chart is created:
       if(USE_SIMULATED_DATA) {
         // Call the update function immediately to start the simulation
