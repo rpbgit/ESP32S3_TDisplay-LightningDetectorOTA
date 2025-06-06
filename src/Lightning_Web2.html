@@ -363,8 +363,10 @@
                     newRate = Math.max(1000, Math.min(60000, newRate));
                     chartUpdateRateInMs = newRate;
                     TextLog(`Chart update rate has been changed to ${newRate} ms x-axis labels may not be useful`);
+                    document.getElementById('Chincey').textContent = `Chart update rate: ${(newRate/1000).toFixed(1)} s`; // Update footer
                 } else {
                     TextLog(`Current chart update rate is ${chartUpdateRateInMs} ms`);
+                    document.getElementById('Chincey').textContent = `Chart update rate: ${(chartUpdateRateInMs/1000).toFixed(1)} s`; // Update footer
                 }
                 // Do not send to ESP32 server if this is a locally handled command
             } else {
@@ -715,6 +717,9 @@
           }
         } // <-- closes options
       }); // <-- closes new Chart
+
+      // Set initial footer value on page load
+      document.getElementById('Chincey').textContent = `Chart update rate: ${(chartUpdateRateInMs/1000).toFixed(1)} s`;
 
       // Optionally, you could start simulated data updates here after the chart is created:
       if(USE_SIMULATED_DATA) {

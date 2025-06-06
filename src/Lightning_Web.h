@@ -374,8 +374,10 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
                     newRate = Math.max(1000, Math.min(60000, newRate));
                     chartUpdateRateInMs = newRate;
                     TextLog(`Chart update rate has been changed to ${newRate} ms x-axis labels may not be useful`);
+                    document.getElementById('Chincey').textContent = `Chart update rate: ${(newRate/1000).toFixed(1)} s`; // Update footer
                 } else {
                     TextLog(`Current chart update rate is ${chartUpdateRateInMs} ms`);
+                    document.getElementById('Chincey').textContent = `Chart update rate: ${(chartUpdateRateInMs/1000).toFixed(1)} s`; // Update footer
                 }
                 // Do not send to ESP32 server if this is a locally handled command
             } else {
@@ -383,7 +385,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
                 var xhttp = new XMLHttpRequest();
                 xhttp.open("PUT", 'TermInput', true); // send name of radio button selected to server
                 xhttp.send(command.substring(5)); // only send the command not the prompt
-                TextLog(`XXXXXX sent: ${command}`);
+                Console.log(`http PUT sent: ${command}`);
             }
 
             document.getElementById('TermInput').value = 'CMD> ';  // leave a prompt behind
