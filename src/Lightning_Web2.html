@@ -422,7 +422,7 @@
       } catch (e) {
           console.error("Error reading INFO tag:", e);
       }
-      console.log((new XMLSerializer()).serializeToString(xmlResponse));  // debug
+      //console.log((new XMLSerializer()).serializeToString(xmlResponse));  // debug
 
       xmldoc = xmlResponse.getElementsByTagName("PWR");
       message = xmldoc[0].firstChild.nodeValue;
@@ -517,20 +517,22 @@
 
     // Function to play Morse code using the jscw library
     function playMorse(text) {
-        if (audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
-
         let vol = getVolume();
         morsePlayer.setVolume(vol);
         morsePlayer.setText(text);
-        morsePlayer.play();
+        if (audioContext.state === 'suspended') {
+          audioContext.resume().then(() => {
+            morsePlayer.play();
+          }).catch(e => console.error('playMorse()-Could not resume audio context:', e));
+        } else {
+          morsePlayer.play();
+        }
         TextLog("Playing Morse: " + text + " vol " + vol);
     }
 
     function playAlarm(frequency, duration, type) {
       if (audioContext.state === 'suspended') {
-        audioContext.resume();
+        audioContext.resume().catch(e => console.error('PlayAlarm()-Audio resume failed:', e));
       }
       // Initialize player with desired settings
       const oscillator = audioContext.createOscillator();
