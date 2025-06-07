@@ -815,5 +815,84 @@
       const container = document.querySelector('.chart-container');
       if (container) container.scrollLeft = 0;
     }
+
+// --------------------- handle the terminal input with command history ------------------------------      
+const commandHistory = [];
+let historyIndex = -1;
+
+document.getElementById('TermInput').addEventListener('keydown', function (event) {
+    // Up arrow
+    if (event.key === 'ArrowUp') {
+        if (commandHistory.length > 0) {
+            if (historyIndex === -1) historyIndex = commandHistory.length - 1;
+            else if (historyIndex > 0) historyIndex--;
+            this.value = commandHistory[historyIndex];
+            // Move cursor to end
+            this.setSelectionRange(this.value.length, this.value.length);
+        }
+        event.preventDefault();
+    }
+    // Down arrow
+    else if (event.key === 'ArrowDown') {
+        if (commandHistory.length > 0 && historyIndex !== -1) {
+            if (historyIndex < commandHistory.length - 1) {
+                historyIndex++;
+                this.value = commandHistory[historyIndex];
+            } else {
+                historyIndex = -1;
+                this.value = 'CMD> ';
+            }
+            // Move cursor to end
+            this.setSelectionRange(this.value.length, this.value.length);
+        }
+        event.preventDefault();
+    }
+});
+
+// Replace previous keypress handler with keydown for Enter
+document.getElementById('TermInput').addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+
+        // Get the command typed by the user
+        const command = document.getElementById('TermInput').value;
+
+        // Only store non-empty, non-duplicate consecutive commands
+        if (command.trim() !== '' && (commandHistory.length === 0 || command !== commandHistory[commandHistory.length - 1])) {
+            commandHistory.push(command);
+            if (commandHistory.length > 16) commandHistory.shift(); // Keep only last 16
+        }
+        historyIndex = -1; // Reset history navigation
+
+        morsetext = command.replace("CMD> ", ""); // remove the prompt from the command
+        morsetext = morsetext.replace(":", ' ')
+        playMorse(morsetext); // play the command in morse code
+
+        // --- Parse "update" command (case-insensitive) and adjust chart update rate ---
+        const updateMatch = command.match(/^CMD>\s*update(?:[\s:]+(\d+))?/i);
+        if (updateMatch) {
+            if (updateMatch[1]) {
+                let newRate = parseInt(updateMatch[1], 10);
+                // Clamp the value between 1000 and 60000
+                newRate = Math.max(1000, Math.min(60000, newRate));
+                chartUpdateRateInMs = newRate;
+                TextLog(`Chart update rate has been changed to ${newRate} ms x-axis labels may not be useful`);
+                document.getElementById('Chincey').textContent = `Chart update rate: ${(newRate/1000).toFixed(1)} s`; // Update footer
+            } else {
+                TextLog(`Current chart update rate is ${chartUpdateRateInMs} ms`);
+                document.getElementById('Chincey').textContent = `Chart update rate: ${(chartUpdateRateInMs/1000).toFixed(1)} s`; // Update footer
+            }
+            // Do not send to ESP32 server if this is a locally handled command
+        } else {
+            // If not a local/client command, forward to the server
+            var xhttp = new XMLHttpRequest();
+            xhttp.open("PUT", 'TermInput', true); // send name of radio button selected to server
+            xhttp.send(command.substring(5)); // only send the command not the prompt
+            console.log(`http PUT sent: ${command}`);
+        }
+
+        document.getElementById('TermInput').value = 'CMD> ';  // leave a prompt behind
+    }
+});
 </script>
 </html>
