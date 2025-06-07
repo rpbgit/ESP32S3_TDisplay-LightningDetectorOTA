@@ -12,8 +12,7 @@ struct CommandEntry {
     CommandHandler handler;
 };
 
-
-
+// CommandParser class for parsing and executing commands
 class CommandParser {
 public:
     CommandParser(CommandEntry *commands, int numCommands);

@@ -5,7 +5,7 @@ CommandParser::CommandParser(CommandEntry *commands, int numCommands)
         memset(inputBuffer, 0, sizeof(inputBuffer));
         memset(commandHistory, 0, sizeof(commandHistory));
 }
-
+ 
 void CommandParser::processInput() {
     if(Serial) {  
         while (Serial.available() > 0) {
