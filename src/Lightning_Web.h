@@ -734,16 +734,14 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
       // Exit if the chart is not initialized
       if (!window.myChart) return;
 
-      let rateValues = [];
       // Generate a new random value for each trace (Strike, Disturber, Noise, Purge)
-      for (let i = 0; i < dataValues.length; i++) {
-        // Generate a random value between 0 and 12, rounded to 1 decimal place
-        let newValue = Math.random() * 12;
-        newValue = Math.round(newValue * 10) / 10;
-        // Ensure the value is not negative or NaN
-        if (isNaN(newValue) || newValue < 0) newValue = 0;
-        rateValues.push(newValue);
-      }
+      let rateValues = dataValues.map(() => {
+          // Generate a random value between 0 and 12, rounded to 1 decimal place
+          let newValue = Math.random() * 12;
+          newValue = Math.round(newValue * 10) / 10;
+          // Ensure the value is not negative or NaN
+          return (isNaN(newValue) || newValue < 0) ? 0 : newValue;
+      });
 
       // Pass the simulated rate values to the unified chart update function
       updateChartWithRates(rateValues);
