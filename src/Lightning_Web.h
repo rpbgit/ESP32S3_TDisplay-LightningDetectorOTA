@@ -550,7 +550,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         } else {
           morsePlayer.play();
         }
-        TextLog("Playing Morse: " + text + " vol " + vol);
+        //TextLog("Playing Morse: " + text + " vol " + vol);
     }
 
     function playAlarm(frequency, duration, type) {
