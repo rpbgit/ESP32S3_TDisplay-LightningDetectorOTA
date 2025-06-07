@@ -1,16 +1,56 @@
 #include "CmdParser.h"
 
-
 CommandParser::CommandParser(CommandEntry *commands, int numCommands) 
-    : commandTable(commands), numCommands(numCommands), bufferIndex(0) {
+    : commandTable(commands), numCommands(numCommands), bufferIndex(0), historyCount(0), historyIndex(-1) {
         memset(inputBuffer, 0, sizeof(inputBuffer));
+        memset(commandHistory, 0, sizeof(commandHistory));
 }
 
 void CommandParser::processInput() {
-    //check and see if the Serial port is connected initialized before looking for something
     if(Serial) {  
-        if (Serial.available() > 0) {
+        while (Serial.available() > 0) {
             char incomingChar = Serial.read();
+
+            // Remove ANSI escape sequence handling
+
+            // Handle Windows up/down arrow keys (0x1E = up, 0x1F = down)
+            if (incomingChar == 0x1E) { // Up arrow
+                if (historyCount > 0) {
+                    // Erase current input from terminal
+                    while (bufferIndex > 0) {
+                        Serial.print("\b \b");
+                        bufferIndex--;
+                    }
+                    if (historyIndex == -1) historyIndex = historyCount - 1;
+                    else if (historyIndex > 0) historyIndex--;
+                    strncpy(inputBuffer, commandHistory[historyIndex], bufferSize - 1);
+                    inputBuffer[bufferSize - 1] = '\0';
+                    bufferIndex = strlen(inputBuffer);
+                    Serial.print(inputBuffer);
+                }
+                continue;
+            }
+            if (incomingChar == 0x1F) { // Down arrow
+                if (historyCount > 0 && historyIndex != -1) {
+                    // Erase current input from terminal
+                    while (bufferIndex > 0) {
+                        Serial.print("\b \b");
+                        bufferIndex--;
+                    }
+                    if (historyIndex < historyCount - 1) {
+                        historyIndex++;
+                        strncpy(inputBuffer, commandHistory[historyIndex], bufferSize - 1);
+                        inputBuffer[bufferSize - 1] = '\0';
+                    } else {
+                        historyIndex = -1;
+                        inputBuffer[0] = '\0';
+                    }
+                    bufferIndex = strlen(inputBuffer);
+                    Serial.print(inputBuffer);
+                }
+                continue;
+            }
+
             // Handle backspace
             if (incomingChar == 8 || incomingChar == 127) { // ASCII 8: Backspace, ASCII 127: DEL
                 if (bufferIndex > 0) {
@@ -18,10 +58,15 @@ void CommandParser::processInput() {
                     Serial.print("\b \b");  // Move cursor back, print space, and move cursor back again
                 }
             } else if (incomingChar == '\n' || incomingChar == '\r') {
-            // Check for end of command
                 inputBuffer[bufferIndex] = '\0'; // Null-terminate the string
-                //Serial.println();  // Move to the next line on the terminal   
                 if (bufferIndex > 0) {
+                    // Add to history if not duplicate
+                    if (historyCount == 0 || strcmp(inputBuffer, commandHistory[(historyCount - 1) % historySize]) != 0) {
+                        strncpy(commandHistory[historyCount % historySize], inputBuffer, bufferSize - 1);
+                        commandHistory[historyCount % historySize][bufferSize - 1] = '\0';
+                        if (historyCount < historySize) historyCount++;
+                    }
+                    historyIndex = -1; // Reset navigation
                     parseCommand(inputBuffer);
                 }
                 bufferIndex = 0; // Reset buffer index for the next command
@@ -41,8 +86,6 @@ void CommandParser::processInput(const char* cmd)
 {
     strncpy(inputBuffer,cmd, sizeof(inputBuffer)-1);
     parseCommand(inputBuffer);  // process a null terminated string as a command
-    //*cmd = (char)"\0"; // make it an empty string when done. 
-
 }
 
 void CommandParser::parseCommand(char* command)
