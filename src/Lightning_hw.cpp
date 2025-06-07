@@ -91,12 +91,13 @@ try to remember to bump this each time a functional mod is done
                             function.  this is used to determine when to turn off the power to the station.
                             also added a command to turn on/off the power to the station via command line, powreq.  new station management function, passes
                             all needed stats, wa9vfp changes into station_management() function.
-04-Jun-2025 w9zv    v5.3    fixed power button to not repeat if held.                            
+04-Jun-2025 w9zv    v5.3    fixed power button to not repeat if held. 
+07-Jun-2025 w9zv    v5.4    added command history buffer on web page AND esp32 serial port with 16 entry buffer.                           
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v5.3";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v5.4";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -1457,6 +1458,8 @@ void handle_HELP_Command(char *param) {
     WebText("\n  SPIKE   ----- Spike rejection filter, R/W, default 0x02, REG0x02, bits [3:0]");
     WebText("\n  THRESH  ----- Lightning Threshold, R/W, number of strikes before int pin triggered, default 0x0 (One stroke), manpage 35, REG0x02, bits [5:4]");
     WebText("\n  TUNECAP ----- Tuning Cap Register, R/W, 0-15 dec or 0x0-0xe, each step is 8pf, max of 16 possible steps REG0x08[3:0]");
+    WebText("\n  STRTRH  ----- Strike Rate Threshold, strike rate/min that if exceeded will trigger power off in station mgmt, default 5");
+    WebText("\n  POWREQ  ----- Power Relay Request, R/W, 0 = OFF, non-zero = ON, toggles the power relay state");
     WebText("\n  ?       ----- print usage \n");
   } else {
     long junk = cp.parseParameter(param);
