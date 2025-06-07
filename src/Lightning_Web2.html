@@ -25,6 +25,7 @@
         flex: 1 1 auto;
         display: flex;
         flex-direction: column;
+        min-height: 0; /* Allow flex children to shrink */
     }
 
     .chart-container {
@@ -154,7 +155,7 @@
     }
 
     .myDiv1 {
-        flex: 1 1 auto; /* This makes it fill the remaining space */
+        flex: 1 1 auto;
         display: flex;
         flex-direction: column;
         border-radius: 3px;
@@ -166,8 +167,8 @@
         max-width: none;
         overflow: hidden;
         box-sizing: border-box;
-        height: auto; /* Remove any fixed height */
-         margin-top: 2px; /* Add a small space above the textbox */
+        min-height: 0; /* Allow flex children to shrink */
+        margin-top: 2px;
     }
 
     .termta#Terminal,
@@ -178,7 +179,7 @@
     }
 
     .termta#Terminal {
-        flex: 1 1 auto;         /* Expands to fill available space */
+        flex: 1 1 auto;
         resize: none;
         min-height: 0;
         width: 100%;
@@ -189,7 +190,7 @@
     }
 
     .termta#TermInput {
-        flex: 0 0 auto;         /* Fixed size at the bottom */
+        flex: 0 0 auto;
         height: 2.2em;
         resize: none;
         margin-top: 2px;
@@ -250,62 +251,50 @@
         </div>
     </header>
 
-    <!-- buttons start here -->
-    <div class="volume-control-container">
-    <input type="button" class="button" id="PWR_Select" name="PWR_Select" value="POWER"
-        onclick="PowerButtonHandler(this.id)">
+    <main class="main-content">
+        <!-- Controls Section -->
+        <section class="volume-control-container">
+            <input type="button" class="button" id="PWR_Select" name="PWR_Select" value="POWER"
+                onclick="PowerButtonHandler(this.id)">
+            <input type="button" class="button" id="R2Select" name="Radio2" value="Test"
+                onclick="TestButtonHandler(this.id)">
+            <label for="volume">Strike Alarm Volume:</label>
+            <input type="range" id="volume" min="0" max=".1" step="0.02" value="0.02">
+        </section>
+        <hr>
+        <!-- Sensor Data Section -->
+        <section class="grid-container">
+            <label for="NoiseAcc">Noise Accumulator:</label>
+            <textarea readonly class="myDatabox" id="NoiseAcc" name="NoiseAcc" rows="1" cols="4">123456</textarea>
+            <label for="NoiseET">Noise ET since last:</label>
+            <textarea readonly class="myDatabox" id="NoiseET" name="NoiseET" rows="1" cols="4">123456</textarea>
+            <label for="DisturberAcc">Disturber Accumulator:</label>
+            <textarea readonly class="myDatabox" id="DisturberAcc" name="DisturberAcc" rows="1" cols="4">123456</textarea>
+            <label for="DisturberET">Disturber ET since last:</label>
+            <textarea readonly class="myDatabox" id="DisturberET" name="DisturberET" rows="1" cols="4">123456</textarea>
+            <label for="StrikeAcc">Strike Accumulator:</label>
+            <textarea readonly class="myDatabox" id="StrikeAcc" name="StrikeAcc" rows="1" cols="4">123456</textarea>
+            <label for="StrikeET">Strike ET since last:</label>
+            <textarea readonly class="myDatabox" id="StrikeET" name="StrikeET" rows="1" cols="4">123456</textarea>
+            <label for="StrikeDist">Strike Distance(mi):</label>
+            <textarea readonly class="myDatabox" id="StrikeDist" name="StrikeDist" rows="1" cols="4">123456</textarea>
+            <label for="StrikeEnergy">Strike Energy:</label>
+            <textarea readonly class="myDatabox" id="StrikeEnergy" name="StrikeEnergy" rows="1" cols="5">123456</textarea>
+        </section>
+        <hr>
+        <!-- Chart Section -->
+        <section class="chart-container">
+            <canvas id="myChart"></canvas>
+        </section>
+        <hr>
+        <!-- Terminal Section -->
+        <section class="myDiv1">
+            <textarea readonly class="termta" id="Terminal" name="Terminal"></textarea>
+            <textarea class="termta" id="TermInput" name="TermInput" rows="1" cols="200">CMD> </textarea>
+        </section>
+    </main>
 
-    <input type="button" class="button" id="R2Select" name="Radio2" value="Test"
-        onclick="TestButtonHandler(this.id)">
-
-    <!-- Volume Slider -->
-        <label for="volume">Strike Alarm Volume:</label>
-        <input type="range" id="volume" min="0" max=".1" step="0.02" value="0.02">
-    </div>
-    <hr>
-    <!-- end of buttons/sliders -->
-     
-    <div class="grid-container">
-        <label for="NoiseAcc">Noise Accumulator:</label>
-        <textarea readonly class="myDatabox" id="NoiseAcc" name="NoiseAcc" rows="1" cols="4">123456</textarea>
-
-        <label for="NoiseET">Noise ET since last:</label>
-        <textarea readonly class="myDatabox" id="NoiseET" name="NoiseET" rows="1" cols="4">123456</textarea>
-
-        <label for="DisturberAcc">Disturber Accumulator:</label>
-        <textarea readonly class="myDatabox" id="DisturberAcc" name="DisturberAcc" rows="1" cols="4">123456</textarea>
-
-        <label for="DisturberET">Disturber ET since last:</label>
-        <textarea readonly class="myDatabox" id="DisturberET" name="DisturberET" rows="1" cols="4">123456</textarea>
-
-        <label for="StrikeAcc">Strike Accumulator:</label>
-        <textarea readonly class="myDatabox" id="StrikeAcc" name="StrikeAcc" rows="1" cols="4">123456</textarea>
-
-        <label for="StrikeET">Strike ET since last:</label>
-        <textarea readonly class="myDatabox" id="StrikeET" name="StrikeET" rows="1" cols="4">123456</textarea>
-
-        <label for="StrikeDist">Strike Distance(mi):</label>
-        <textarea readonly class="myDatabox" id="StrikeDist" name="StrikeDist" rows="1" cols="4">123456</textarea>
-
-        <label for="StrikeEnergy">Strike Energy:</label>
-        <textarea readonly class="myDatabox" id="StrikeEnergy" name="StrikeEnergy" rows="1" cols="5">123456</textarea>
-    </div>
-    <hr>
-    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
-    <!-- Chart container for real-time charting -->
-    <div class="chart-container">
-      <canvas id="myChart"></canvas>
-    </div>
-    <hr>
-    <div class="myDiv1">
-        <textarea readonly class="termta" id="Terminal" name="Terminal" ></textarea>
-        <textarea class="termta" id="TermInput" name="TermInput" rows="1" cols="200">CMD> </textarea>
-    </div>
-    <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
-
-
-    <footer div class="foot" id="Chincey">THIS IS A TEST FOOTER</div>
-    </footer>
+    <footer class="foot" id="Chincey">THIS IS A TEST FOOTER</footer>
 
   <script type="text/javascript">
 // ============================================= WEB PAGE ABOVE =================================================
