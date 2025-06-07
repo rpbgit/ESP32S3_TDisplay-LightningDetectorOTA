@@ -298,7 +298,6 @@
     </div>
     <hr>
     <div class="myDiv1">
-        <!-- <textarea readonly class="termta" id="Terminal" name="Terminal" rows="10" cols="200"></textarea> -->
         <textarea readonly class="termta" id="Terminal" name="Terminal" ></textarea>
         <textarea class="termta" id="TermInput" name="TermInput" rows="1" cols="200">CMD> </textarea>
     </div>
@@ -374,7 +373,7 @@
                 var xhttp = new XMLHttpRequest();
                 xhttp.open("PUT", 'TermInput', true); // send name of radio button selected to server
                 xhttp.send(command.substring(5)); // only send the command not the prompt
-                Console.log(`http PUT sent: ${command}`);
+                console.log(`http PUT sent: ${command}`);
             }
 
             document.getElementById('TermInput').value = 'CMD> ';  // leave a prompt behind
