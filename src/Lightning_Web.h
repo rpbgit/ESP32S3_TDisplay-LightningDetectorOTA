@@ -578,17 +578,60 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         process();
     };
 
-    function process() {
-        if (xmlHttp.readyState == 0 || xmlHttp.readyState == 4) {
-            xmlHttp.open("GET", "xml", true);
-            xmlHttp.onreadystatechange = response;
-            xmlHttp.send(null);
-        }
-        if(!USE_SIMULATED_DATA)
-          setTimeout("process()", 500); // Poll the server every 500ms
-    }
+    // --- XML timeout and auto-reload logic ---
+let xmlTimeoutCount = 0;                // Track consecutive XML timeouts
+const XML_TIMEOUT_MS = 3000;            //  seconds per XML request
+const XML_TIMEOUT_LIMIT = 3;            // Reload after 3 consecutive timeouts
+let reloadInterval = null;              // Interval handle for repeated reloads
 
-    // --- Chart.js initialization (add your chart logic here) ---
+function process() {
+    let timedOut = false;
+    // Start a timeout for the XML request
+    let timeoutHandle = setTimeout(function() {
+        timedOut = true;
+        xmlTimeoutCount++;
+        TextLog(`XML request timed out (${xmlTimeoutCount}/${XML_TIMEOUT_LIMIT})`);
+        if (xmlTimeoutCount >= XML_TIMEOUT_LIMIT) {
+            TextLog("Too many XML timeouts. Attempting to reload the web page...");
+            tryReloadUntilSuccess();
+        }
+    }, XML_TIMEOUT_MS);
+
+    // Only send a new request if ready
+    if (xmlHttp.readyState == 0 || xmlHttp.readyState == 4) {
+        xmlHttp.open("GET", "xml", true);
+        xmlHttp.onreadystatechange = function() {
+            if (xmlHttp.readyState == 4) {
+                clearTimeout(timeoutHandle);
+                if (!timedOut) {
+                    if (xmlTimeoutCount > 0) TextLog("XML request succeeded, resetting timeout counter.");
+                    xmlTimeoutCount = 0; // Reset on success
+                    response();
+                }
+            }
+        };
+        xmlHttp.send(null);
+    }
+    // Continue polling if not using simulated data and not in reload mode
+    if (!USE_SIMULATED_DATA && reloadInterval === null)
+        setTimeout(process, 500); // Poll the server every 500ms
+}
+
+// This function will continuously try to reload the page until it succeeds
+function tryReloadUntilSuccess() {
+    if (reloadInterval !== null) return; // Already trying to reload
+
+    TextLog("Starting continuous reload attempts...");
+    reloadInterval = setInterval(function() {
+        TextLog("Reloading page (location.reload)...");
+        // Try to reload from the server (not cache)
+        location.reload(true);
+        // If reload succeeds, this script will be reloaded and interval will be cleared by browser
+        // If reload fails, this interval will keep trying every 5 seconds
+    }, 5000);
+}
+
+// --- Chart.js initialization (add your chart logic here) ---
     // Example: basic real-time chart setup
     // --- DATA INITIALIZATION ---
 

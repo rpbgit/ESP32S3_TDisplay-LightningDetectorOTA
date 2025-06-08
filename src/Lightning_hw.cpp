@@ -92,12 +92,17 @@ try to remember to bump this each time a functional mod is done
                             also added a command to turn on/off the power to the station via command line, powreq.  new station management function, passes
                             all needed stats, wa9vfp changes into station_management() function.
 04-Jun-2025 w9zv    v5.3    fixed power button to not repeat if held. 
-07-Jun-2025 w9zv    v5.4    added command history buffer on web page AND esp32 serial port with 16 entry buffer.                           
+07-Jun-2025 w9zv    v5.4    added command history buffer on web page AND esp32 serial port with 16 entry buffer. 
+08-Jun-2025 w9zv    v5.5    added auto-reload of the web page if the XML request times out 3 times in a row.
+                            this is to handle the case where the web page is not responding and needs to be reloaded.
+                            also added a command to change the chart update rate dynamically, update <rate> where rate is in milliseconds.
+                            this allows the user to change the chart update rate without having to reload the page or wait for the server response.
+                            both of these features are handled in the web page javascript code, but this file is touched to update the version number                        
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v5.4";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v5.5";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
