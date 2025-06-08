@@ -97,7 +97,7 @@ try to remember to bump this each time a functional mod is done
                             this is to handle the case where the web page is not responding and needs to be reloaded.
                             also added a command to change the chart update rate dynamically, update <rate> where rate is in milliseconds.
                             this allows the user to change the chart update rate without having to reload the page or wait for the server response.
-                            both of these features are handled in the web page javascript code, but this file is touched to update the version number                        
+                            both of these features are handled in the web page javascript code, but this file is touched to update the version number                         
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
