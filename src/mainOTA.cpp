@@ -313,12 +313,13 @@ void PrintWifiStatus()
 }
 
 // code to send the main web page
-// PAGE_MAIN is a large char defined in SuperMon.h
+// PAGE_MAIN is a large char defined in Lightning_Web.h, which is derived from .http file
 void SendWebsite(AsyncWebServerRequest *request)
 {
-    Serial.println("sending web page");
-    // you may have to play with this value, big pages need more porcessing time, and hence
-    // a longer timeout that 200 ms
+    //Serial.println("sending web page");
+    // Log the client IP using WebText
+    IPAddress clientIP = request->client()->remoteIP();
+    Serial.printf("Web client connected: %s\n", clientIP.toString().c_str());
     request->send(200, "text/html", PAGE_MAIN);  // This loads the webpage in RAS_Web.h as the web page to the browser.
 }
 

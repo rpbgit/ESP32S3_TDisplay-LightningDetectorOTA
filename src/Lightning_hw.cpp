@@ -691,7 +691,7 @@ void loop2(HostCmdEnum & host_command)
                 alm_display_state = true;
                 stroke_last = now; // Save the current time for the next event
         
-                Sensor.clearStatistics(); // Clear the statistics and strike register accumulation
+                Sensor.clearStatistics(); // Clear the statistics and strike register accumulation otherwise strike threshold will never be reached again.
                 break;
             }
 
@@ -1188,12 +1188,12 @@ void handle_AFE_Command(char* param)
 {
     if (param != NULL) {
         long regval = cp.parseParameter(param);
-        if(regval == AS3935MI::AS3935_OUTDOORS)
+        if(regval == 0)
             Sensor.writeAFE(AS3935MI::AS3935_OUTDOORS);
-        else if (regval == AS3935MI::AS3935_INDOORS) 
+        else if (regval == 1) 
             Sensor.writeAFE(AS3935MI::AS3935_INDOORS);
         else  
-            WebText("\t- only acceptable values are 0x12 (Indoor) or 0x0e (Outdoor)\n");
+            WebText("\t- only acceptable values are 1 (Indoor, default) or 0 (Outdoor)\n");
     }
     WebText("\t- AFE indoor/outdoor is %s\n", Sensor.readAFE() == AS3935MI::AS3935_OUTDOORS ? "OUTDOOR" : "INDOOR");
 }

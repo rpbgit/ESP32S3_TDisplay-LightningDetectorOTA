@@ -580,7 +580,7 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
 
     // --- XML timeout and auto-reload logic ---
 let xmlTimeoutCount = 0;                // Track consecutive XML timeouts
-const XML_TIMEOUT_MS = 3000;            //  seconds per XML request
+const XML_TIMEOUT_MS = 5000;            //  seconds per XML request
 const XML_TIMEOUT_LIMIT = 3;            // Reload after 3 consecutive timeouts
 let reloadInterval = null;              // Interval handle for repeated reloads
 
