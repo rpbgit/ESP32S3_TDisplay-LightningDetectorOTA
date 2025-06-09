@@ -187,6 +187,8 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         width: 100%;           /* <-- fill container horizontally */
         min-width: 0;          /* <-- allow shrinking in flexbox */
         box-sizing: border-box;
+        background-color: #1F1F1F !important;
+        color: cyan !important;
     }
 
     .termta#Terminal {
@@ -194,8 +196,6 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         resize: none;
         min-height: 0;
         width: 100%;
-        background-color: rgba(48, 49, 48, 0.473);
-        color: cyan;
         border-radius: 3px;
         box-sizing: border-box;
     }
@@ -206,8 +206,6 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
         resize: none;
         margin-top: 2px;
         width: 100%;
-        background-color: rgba(48, 49, 48, 0.473);
-        color: cyan;
         border-radius: 3px;
         box-sizing: border-box;
     }
@@ -950,5 +948,4 @@ document.getElementById('TermInput').addEventListener('keydown', function (event
 });
 </script>
 </html>
-
 )=====";
