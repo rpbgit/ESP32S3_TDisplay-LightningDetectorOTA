@@ -12,6 +12,7 @@ this file manages the wifi connections and communications to the web client for 
 #include <ElegantOTA.h>   // ElegantOTA lib
 #include "defs.h"
 #include "creds.h"  // unique credentials file for sharing this code, unique network stuff here.
+#include <ArduinoJson.h>
 
 #define DISABLE_ALL_LIBRARY_WARNINGS 1 // disable all library warnings for tft_eSPI
 #include "TFT_eSPI.h"
@@ -32,7 +33,8 @@ bool bWiFi_Connected = false;
 
 // forward ref function prototype
 void SendWebsite(AsyncWebServerRequest *request);
-void SendXML(AsyncWebServerRequest *request);
+//void SendXML(AsyncWebServerRequest *request);
+void SendJSON(AsyncWebServerRequest *request);
 void PrintWifiStatus();
 void buildXmlTag(char *buffer, size_t bufferSize, const char *tagName, unsigned long value);
 // void printRequestDetails(AsyncWebServerRequest *request);
@@ -175,7 +177,8 @@ delay(1000);
 
     // upon ESP getting /XML string, ESP will build and send the XML, this is how we refresh
     // just parts of the web page
-    server.on("/xml", HTTP_GET, SendXML);
+    // server.on("/xml", HTTP_GET, SendXML); // use this to send XML data to the web page
+    server.on("/json", HTTP_GET, SendJSON); // use this to send JSON data to the web page
 
     // upon ESP getting various handler strings, ESP will execute the corresponding handler functions
     // same notion for the following .on calls
@@ -382,91 +385,134 @@ String wrapXmlTag(String tagName, const String& content) {
     }
 }
 
-// this function will get the current status of all hardware and create the XML message with status
-// and send it back to the page
-void SendXML(AsyncWebServerRequest *request) {
-    // New implementation using String with reserved memory
-    static char tempBuffer[4096] = {0};
-    static String xmlData;
-    xmlData.reserve(4096); // Reserve memory to minimize reallocations
 
-    xmlData = "<?xml version='1.0'?>\n<Data>\n";
+void SendJSON(AsyncWebServerRequest *request) {
+    // Use a slightly larger buffer if needed, but keep it reasonable
+    StaticJsonDocument<1152> doc;
 
-    // Add hardware status
     get_hardware_status(RAS_Status);
-    xmlData += pRas->PWR_Button ? "<PWR>1</PWR>\n" : "<PWR>0</PWR>\n";
+    doc["PWR"] = pRas->PWR_Button ? 1 : 0;
+    doc["NOISE_ACC"] = pRas->noise_accum;
+    doc["NOISE_ET"] = pRas->noise_et;
+    doc["DISTURB_ACC"] = pRas->disturber_accum;
+    doc["DISTURB_ET"] = pRas->disturber_et;
+    doc["STRIKE_ACC"] = pRas->strike_accum;
+    doc["STRIKE_ET"] = pRas->strike_et;
+    doc["STRIKE_DIST"] = pRas->strike_distance;
+    doc["STRIKE_ENER"] = pRas->strike_energy;
 
-    // Add other tags (unchanged)
-    xmlData += "<NOISE_ACC>" + String(pRas->noise_accum) + "</NOISE_ACC>\n";
-    xmlData += "<NOISE_ET>" + String(pRas->noise_et) + "</NOISE_ET>\n";
-    xmlData += "<DISTURB_ACC>" + String(pRas->disturber_accum) + "</DISTURB_ACC>\n";
-    xmlData += "<DISTURB_ET>" + String(pRas->disturber_et) + "</DISTURB_ET>\n";
-    xmlData += "<STRIKE_ACC>" + String(pRas->strike_accum) + "</STRIKE_ACC>\n";
-    xmlData += "<STRIKE_ET>" + String(pRas->strike_et) + "</STRIKE_ET>\n";
-    xmlData += "<STRIKE_DIST>" + String(pRas->strike_distance,1) + "</STRIKE_DIST>\n";
-    xmlData += "<STRIKE_ENER>" + String(pRas->strike_energy) + "</STRIKE_ENER>\n";
+    JsonArray rates = doc.createNestedArray("RATES");
+    rates.add(pRas->strikeRate);
+    rates.add(pRas->disturberRate);
+    rates.add(pRas->noiseRate);
+    rates.add(pRas->purgeRate);
 
-    // --- Add new RATES tag as a comma-separated list from pRas rate fields ---
-    // Use the float rate fields, not the *_accum fields
-    xmlData += "<RATES>";
-    xmlData += String(pRas->strikeRate, 2) + ",";
-    xmlData += String(pRas->disturberRate, 2) + ",";
-    xmlData += String(pRas->noiseRate, 2) + ",";
-    xmlData += String(pRas->purgeRate, 2); // No trailing comma
-    xmlData += "</RATES>\n";
-    // -------------------------------------------------------------------------
-
-    // Add version
-    xmlData += "<VER>";
-    xmlData += RAS_Status.pSoftwareVersion;
-    xmlData += "</VER>\n";
-
-    // Add INFO tag if the RingBuffer is not empty
-    if (!RingBuffer.isEmpty()) { 
-        RingBuffer.concat_and_remove_all(tempBuffer);
-        xmlData += wrapXmlTag("INFO", tempBuffer);
-    }
-    xmlData += "</Data>\n";
-    
-    // Send the XML data
-    request->send(200, "text/xml", xmlData);
-}
-/*
-// Original implementation using global XML_buffer
-void SendXML(AsyncWebServerRequest *request) {
-    XML_buffer[0] = 0; // make sure the buffer is empty before we start building it.
-
-    // Collect the hardware status that reflects the current state of the buttons/LEDs
-    get_hardware_status(RAS_Status);
-
-    strcpy(XML_buffer, "<?xml version='1.0'?>\n<Data>\n");
-
-    strcat(XML_buffer, pRas->PWR_Button ? "<PWR>1</PWR>\n" : "<PWR>0</PWR>\n");
-
-    buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "NOISE_ACC", pRas->noise_accum);
-    buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "NOISE_ET", pRas->noise_et);
-    buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "DISTURB_ACC", pRas->disturber_accum);
-    buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "DISTURB_ET", pRas->disturber_et);
-    buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_ACC", pRas->strike_accum);
-    buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_ET", pRas->strike_et);
-    buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_DIST", pRas->strike_distance);
-    buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_ENER", pRas->strike_energy);
-
-    snprintf(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer),
-             "<VER>%s</VER>\n", RAS_Status.pSoftwareVersion);
+    doc["VER"] = RAS_Status.pSoftwareVersion;
 
     if (!RingBuffer.isEmpty()) {
-        strcat(XML_buffer + strlen(XML_buffer), "<INFO>");
-        RingBuffer.concat_all(XML_buffer + strlen(XML_buffer));
-        strcat(XML_buffer + strlen(XML_buffer), "</INFO>\n");
+        char infoBuffer[4096] = {0};
+        RingBuffer.concat_and_remove_all(infoBuffer);
+        doc["INFO"] = infoBuffer;
     }
-    RingBuffer.delete_all();
 
-    strcat(XML_buffer, "</Data>\n");
+    // Stream JSON directly to response
+    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    serializeJson(doc, *response);
+    request->send(response);
 
-    request->send(200, "text/xml", XML_buffer);
+    // Optionally, print JSON to serial for debugging
+    #ifdef DEBUG
+    String debugBuffer;
+    serializeJson(doc, debugBuffer);
+    Serial.println("JSON: " + debugBuffer);
+    #endif
 }
-*/
+// this function will get the current status of all hardware and create the XML message with status
+// and send it back to the page
+// void SendXML(AsyncWebServerRequest *request) {
+//     // New implementation using String with reserved memory
+//     static char tempBuffer[4096] = {0};
+//     static String xmlData;
+//     xmlData.reserve(4096); // Reserve memory to minimize reallocations
+
+//     xmlData = "<?xml version='1.0'?>\n<Data>\n";
+
+//     // Add hardware status
+//     get_hardware_status(RAS_Status);
+//     xmlData += pRas->PWR_Button ? "<PWR>1</PWR>\n" : "<PWR>0</PWR>\n";
+
+//     // Add other tags (unchanged)
+//     xmlData += "<NOISE_ACC>" + String(pRas->noise_accum) + "</NOISE_ACC>\n";
+//     xmlData += "<NOISE_ET>" + String(pRas->noise_et) + "</NOISE_ET>\n";
+//     xmlData += "<DISTURB_ACC>" + String(pRas->disturber_accum) + "</DISTURB_ACC>\n";
+//     xmlData += "<DISTURB_ET>" + String(pRas->disturber_et) + "</DISTURB_ET>\n";
+//     xmlData += "<STRIKE_ACC>" + String(pRas->strike_accum) + "</STRIKE_ACC>\n";
+//     xmlData += "<STRIKE_ET>" + String(pRas->strike_et) + "</STRIKE_ET>\n";
+//     xmlData += "<STRIKE_DIST>" + String(pRas->strike_distance,1) + "</STRIKE_DIST>\n";
+//     xmlData += "<STRIKE_ENER>" + String(pRas->strike_energy) + "</STRIKE_ENER>\n";
+
+//     // --- Add new RATES tag as a comma-separated list from pRas rate fields ---
+//     // Use the float rate fields, not the *_accum fields
+//     xmlData += "<RATES>";
+//     xmlData += String(pRas->strikeRate, 2) + ",";
+//     xmlData += String(pRas->disturberRate, 2) + ",";
+//     xmlData += String(pRas->noiseRate, 2) + ",";
+//     xmlData += String(pRas->purgeRate, 2); // No trailing comma
+//     xmlData += "</RATES>\n";
+//     // -------------------------------------------------------------------------
+
+//     // Add version
+//     xmlData += "<VER>";
+//     xmlData += RAS_Status.pSoftwareVersion;
+//     xmlData += "</VER>\n";
+
+//     // Add INFO tag if the RingBuffer is not empty
+//     if (!RingBuffer.isEmpty()) { 
+//         RingBuffer.concat_and_remove_all(tempBuffer);
+//         xmlData += wrapXmlTag("INFO", tempBuffer);
+//     }
+//     xmlData += "</Data>\n";
+    
+//     // Send the XML data
+//     request->send(200, "text/xml", xmlData);
+// }
+// /*
+// // Original implementation using global XML_buffer
+// void SendXML(AsyncWebServerRequest *request) {
+//     XML_buffer[0] = 0; // make sure the buffer is empty before we start building it.
+
+//     // Collect the hardware status that reflects the current state of the buttons/LEDs
+//     get_hardware_status(RAS_Status);
+
+//     strcpy(XML_buffer, "<?xml version='1.0'?>\n<Data>\n");
+
+//     strcat(XML_buffer, pRas->PWR_Button ? "<PWR>1</PWR>\n" : "<PWR>0</PWR>\n");
+
+//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "NOISE_ACC", pRas->noise_accum);
+//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "NOISE_ET", pRas->noise_et);
+//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "DISTURB_ACC", pRas->disturber_accum);
+//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "DISTURB_ET", pRas->disturber_et);
+//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_ACC", pRas->strike_accum);
+//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_ET", pRas->strike_et);
+//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_DIST", pRas->strike_distance);
+//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_ENER", pRas->strike_energy);
+
+//     snprintf(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer),
+//              "<VER>%s</VER>\n", RAS_Status.pSoftwareVersion);
+
+//     if (!RingBuffer.isEmpty()) {
+//         strcat(XML_buffer + strlen(XML_buffer), "<INFO>");
+//         RingBuffer.concat_all(XML_buffer + strlen(XML_buffer));
+//         strcat(XML_buffer + strlen(XML_buffer), "</INFO>\n");
+//     }
+//     RingBuffer.delete_all();
+
+//     strcat(XML_buffer, "</Data>\n");
+
+//     request->send(200, "text/xml", XML_buffer);
+// }
+// */
+
 void WebText(const char *format, ...) {
     // Temporary buffer to hold the formatted string
     static char tempBuf[2048] = {0};
@@ -486,7 +532,6 @@ void WebText(const char *format, ...) {
 }
 
 extern CommandParser cp;
-
 void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     // The body content is received in chunks, so we need to process it
     String bodyContent = "";

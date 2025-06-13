@@ -97,12 +97,15 @@ try to remember to bump this each time a functional mod is done
                             this is to handle the case where the web page is not responding and needs to be reloaded.
                             also added a command to change the chart update rate dynamically, update <rate> where rate is in milliseconds.
                             this allows the user to change the chart update rate without having to reload the page or wait for the server response.
-                            both of these features are handled in the web page javascript code, but this file is touched to update the version number                         
+                            both of these features are handled in the web page javascript code, but this file is touched to update the version number
+12-Jun-2025 w9zv    v6.0    converted to use JSON for the web page data rather than XML.  this is to make it easier to parse and handle the data 
+                            on the web page.
+                            
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v5.5";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v6.0";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -162,29 +165,29 @@ CommandEntry commandTable[] = {
     {"noise",    handle_Noise_Command },
     {"doggy",    handle_DOGGY_Command },
     {"spike",    handle_SPIKE_Command },
-  {"thresh",   handle_THRESH_Command },
-  {"dist",     handle_DIST_Command },
-  {"energy",   handle_ENERGY_Command },
-  {"tunecap",  handle_TUNECAP_Command },
-  {"mask",     handle_MASK_Command },
-  {"divrat",   handle_DIVRAT_Command },
-  {"sim",      handle_SIMULATOR_Command },
-  {"loopt",    handle_GETMAXLOOPTIME_Comnmand },
-  {"calmode",  handle_CALMODE_Command },
-  {"evtdsbl",  handle_EVTDSBL_Command },
-  {"fact",     handle_FACT_Command },
-  {"cstats",   handle_CLRSTATS_Command },
-  {"inv",      handle_DISPLAYINVERT_Command },
-  {"calant",   handle_CALANT_Command }, 
-  {"calosc",   handle_CALOSC_Command },
-  {"strtrh",   handle_STRTRH_Command },
-  {"powreq",   handle_PWRRQST_Command },
+    {"thresh",   handle_THRESH_Command },
+    {"dist",     handle_DIST_Command },
+    {"energy",   handle_ENERGY_Command },
+    {"tunecap",  handle_TUNECAP_Command },
+    {"mask",     handle_MASK_Command },
+    {"divrat",   handle_DIVRAT_Command },
+    {"sim",      handle_SIMULATOR_Command },
+    {"loopt",    handle_GETMAXLOOPTIME_Comnmand },
+    {"calmode",  handle_CALMODE_Command },
+    {"evtdsbl",  handle_EVTDSBL_Command },
+    {"fact",     handle_FACT_Command },
+    {"cstats",   handle_CLRSTATS_Command },
+    {"inv",      handle_DISPLAYINVERT_Command },
+    {"calant",   handle_CALANT_Command }, 
+    {"calosc",   handle_CALOSC_Command },
+    {"strtrh",   handle_STRTRH_Command },
+    {"powreq",   handle_PWRRQST_Command },
 
-  // put any new commands above this line so that the reset command doesnt recurse on itself or do help
-  {"regtst",   sensor_register_test }, 
-  {"reset",    handle_RESET_Command },
-  {"dump",     handle_DUMP_Command },
-  {"?",        handle_HELP_Command }
+    // put any new commands above this line so that the reset command doesnt recurse on itself or do help
+    {"regtst",   sensor_register_test }, 
+    {"reset",    handle_RESET_Command },
+    {"dump",     handle_DUMP_Command },
+    {"?",        handle_HELP_Command }
 };
 
 // create an instance of the CommandParser, passing the function pointer table to it, and the number of functions in the list.
@@ -662,7 +665,7 @@ void loop2(HostCmdEnum & host_command)
                 // Convert distance to miles (device register output is in km)
 //distance = ((long)distance * 621371L) / 1000000L;
                 const float KM_TO_MILES = 0.621371;
-                float miles = (float)distance * KM_TO_MILES;
+                float miles = roundf((float)distance * KM_TO_MILES * 10.0f) / 10.0f; // Round to one decimal place
                 if (distance == 40 ) {  // Handle the case where the device says out of range
                     tft.printf(" Storm is Out of Range    ");
                     WebText("\tOut of Range ");

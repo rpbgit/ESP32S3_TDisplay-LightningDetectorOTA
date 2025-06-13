@@ -1,0 +1,14 @@
+{
+  "INFO": "System OK",
+  "PWR": "1",
+  "NOISE_ACC": "111",
+  "NOISE_ET": "222",
+  "DISTURB_ACC": "333",
+  "DISTURB_ET": "444",
+  "STRIKE_ACC": "555",
+  "STRIKE_ET": "666",
+  "STRIKE_DIST": "1.6666666",
+  "STRIKE_ENER": "888",
+  "VER": "999.999.999",
+  "RATES": [1,2.2,3.5,4.2]
+}
