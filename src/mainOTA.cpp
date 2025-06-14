@@ -388,7 +388,7 @@ String wrapXmlTag(String tagName, const String& content) {
 
 void SendJSON(AsyncWebServerRequest *request) {
     // Use a slightly larger buffer if needed, but keep it reasonable
-    StaticJsonDocument<1152> doc;
+    StaticJsonDocument<4096> doc;
 
     get_hardware_status(RAS_Status);
     doc["PWR"] = pRas->PWR_Button ? 1 : 0;
