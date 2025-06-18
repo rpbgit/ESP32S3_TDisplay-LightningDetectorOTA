@@ -23,6 +23,7 @@ const char* HOSTNAME = "FVP-STORM-MONITOR"; // 14-dec-2024 w9zv
 #define WWW_PASSWORD "ENewman"  // only defs in here, no allocations.
 
 #define MY_RAS_HTTP_PORT 50010   // for now, adjust as desired, this seems to work.
+#define MY_LD_HTTPS_PORT 50011 // lightning detector, this is the port for the web server. 
 
 // Define a structure for the WiFi APs
 typedef struct {

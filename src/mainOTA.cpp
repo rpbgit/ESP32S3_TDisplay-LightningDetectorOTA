@@ -77,7 +77,7 @@ IPAddress subnet(255, 255, 255, 0);
 IPAddress ip;
 
 // gotta create a server
-AsyncWebServer server(MY_RAS_HTTP_PORT);  // use 50010 an "unknown" port for use on the public WAN.
+AsyncWebServer server(MY_LD_HTTPS_PORT);  // use 50011 an "unknown" port for use on the public WAN.
 
 // this is the command sent by EITHER the VB console -OR- the webpage console
 // its the only coupling needed between the WiFi/Web page stuff and the hardware.
