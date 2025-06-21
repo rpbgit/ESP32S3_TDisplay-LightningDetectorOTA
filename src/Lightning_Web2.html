@@ -415,7 +415,7 @@
       ta.scrollTop = ta.scrollHeight;
   }
 
-  // function to handle the XML response FROM the ESP
+  // function to handle the XML response FROM the ESP <<< NO LONGER USED >>>
   // let Strike_last_strike_accumulator_value = 0;  // used to determine when to play the strike alarm tone
   // let Strike_this_time = 0;
   /* function response() {  // this version parses XML response from ESP32
@@ -513,16 +513,20 @@
         message = xmldoc[0].firstChild.nodeValue;
         document.getElementById("headerTitle").textContent = "ESP32 Storm detector " + message;
     }
-
+    
     // Update chart data from <RATES> XML tag
-    if( !USE_SIMULATED_DATA )
+      if( !USE_SIMULATED_DATA )
       updateChartFromRatesXML(xmlResponse);
   } */
-
+     
   // Place this outside the function, at the top of your script
   let Strike_last_strike_accumulator_value = 0;
-
-  function response() { // This version of the response function handles the JSON response from the ESP32
+  
+  let lastChartUpdateTime = 0; // Add this global to track last chart update time
+  let chartUpdateRateInMs = 60000; // Update every 60 seconds by default
+  
+  // This version of the response function handles the JSON response from the ESP32
+  function response() { 
     let Strike_this_time = 0;
     let message;
     let color = "#e8e8e8";
@@ -616,6 +620,10 @@ console.log('Received JSON:', jsonResponse);
     // --- Update chart data from RATES array ---
     // Expecting RATES as an array of numbers, e.g. [strike, disturber, noise, purge]
     if (!USE_SIMULATED_DATA && Array.isArray(jsonResponse.RATES)) {
+        // Only update once per minute unless overridden by user command
+        const now = Date.now();
+        if (now - lastChartUpdateTime < chartUpdateRateInMs) return; // if'n its not time to update, return do nothing
+        lastChartUpdateTime = now;
         updateChartWithRates(jsonResponse.RATES.map(val => {
             let f = parseFloat(val);
             return (isNaN(f) || f < 0) ? 0 : f;
@@ -905,9 +913,7 @@ console.log('Received JSON:', jsonResponse);
   // --- CHART UPDATE FUNCTION FROM XML DATA ---
   // Updates the chart with new data from the <RATES> XML tag.
   // Call this from your response() function after receiving new XML data.
-  // Add this global to track last chart update time
-  let lastChartUpdateTime = 0;
-  let chartUpdateRateInMs = 60000; // Update every 60 seconds
+
   function updateChartFromRatesXML(xmlResponse) {
     // Only update once per minute
     const now = Date.now();

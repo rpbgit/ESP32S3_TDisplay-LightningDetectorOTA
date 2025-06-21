@@ -109,12 +109,14 @@ try to remember to bump this each time a functional mod is done
                             Values: 1, 5, 9, 16 (default: 1)
                             This set minimum number of lightning events counted within 15 minutes must occur before the first “Lightning detected” interrupt 
                             is sent. Once this threshold is passed, the sensor will resume its normal interrupt handling with an interrupt per detected lightning
-                            
+21-Jun-2025 w9zv    v6.3    i broke the update chart rate and command when i did the JSON conversion from XML and the http chart simulation data, fixed it so it 
+                            works again.
+
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v6.2";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v6.3";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
