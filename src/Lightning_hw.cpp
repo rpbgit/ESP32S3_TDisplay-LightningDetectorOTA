@@ -100,12 +100,21 @@ try to remember to bump this each time a functional mod is done
                             both of these features are handled in the web page javascript code, but this file is touched to update the version number
 12-Jun-2025 w9zv    v6.0    converted to use JSON for the web page data rather than XML.  this is to make it easier to parse and handle the data 
                             on the web page.
+21-Jun-2025 w9zv    v6.2    removed clearStatistics() on every strike interrupt.  found information that says that clearing the stats register on every 
+                            strike interrupt is NOT recommended as it affects the distance and energy calculations (which depend on internal stats 
+                            history over the last 15m).  further, discovered that the strike threshold value only affects the count to the time the 
+                            FIRST strike interrupt occurs, thereafter, it the interrupt occurs every strike irrespective of the threshold value (we initially 
+                            thought this a bug, and added the stats reg clear). 
+                            Lightning Threshold
+                            Values: 1, 5, 9, 16 (default: 1)
+                            This set minimum number of lightning events counted within 15 minutes must occur before the first “Lightning detected” interrupt 
+                            is sent. Once this threshold is passed, the sensor will resume its normal interrupt handling with an interrupt per detected lightning
                             
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v6.0";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v6.2";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
