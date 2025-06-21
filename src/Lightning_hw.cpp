@@ -693,8 +693,9 @@ void loop2(HostCmdEnum & host_command)
                 alm_enable_flashcount = ALARM_FLASH_COUNT_PER_ALARM;
                 alm_display_state = true;
                 stroke_last = now; // Save the current time for the next event
-        
-                Sensor.clearStatistics(); // Clear the statistics and strike register accumulation otherwise strike threshold will never be reached again.
+                
+                // 21-Jun-2025 w8zv discovered that doing this will mess up the distance and energy calculations, so removed it
+                //Sensor.clearStatistics(); // Clear the statistics and strike register accumulation otherwise strike threshold will never be reached again.
                 break;
             }
 
