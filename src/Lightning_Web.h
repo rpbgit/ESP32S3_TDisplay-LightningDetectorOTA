@@ -563,7 +563,7 @@ console.log('Received JSON:', jsonResponse);
     // --- INFO log ---
     if (jsonResponse.INFO) {
         try {
-            let infoMsg = jsonResponse.INFO.trim();
+            let infoMsg = jsonResponse.INFO;// dont let trim cut off leading \n .trim();
             TextLog(infoMsg);
             console.log(infoMsg);
         } catch (e) {

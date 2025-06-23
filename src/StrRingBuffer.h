@@ -3,8 +3,8 @@
 
 #include <cstring> // For strcpy, strcat
 
-constexpr size_t BUFFER_SIZE = 40;    // Number of slots in the buffer
-constexpr size_t MAX_STRING_LEN = 200;  // Max length of each string
+constexpr size_t BUFFER_SIZE = 60;    // Number of slots in the buffer
+constexpr size_t MAX_STRING_LEN = 128;  // Max length of each string
 
 class StringRingBuffer {
 public:
