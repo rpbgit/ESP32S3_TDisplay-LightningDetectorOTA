@@ -111,12 +111,15 @@ try to remember to bump this each time a functional mod is done
                             is sent. Once this threshold is passed, the sensor will resume its normal interrupt handling with an interrupt per detected lightning
 21-Jun-2025 w9zv    v6.3    i broke the update chart rate and command when i did the JSON conversion from XML and the http chart simulation data, fixed it so it 
                             works again.
+22-Jun-2025 w9zv    v6.4    RingBuffer ran out of slots on dump command so the first couple of lines were overwritten (expected behavior for ringbuff), increased 
+                            slots by 20 and reduced the max stringlengh to 128/slot since i have never seen it exceed this. also dont trim JSON INFO tag to 
+                            retain all formatting as is in jscript. 
 
 */
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v6.3";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v6.4";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
