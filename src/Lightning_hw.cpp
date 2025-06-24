@@ -728,7 +728,6 @@ void loop2(HostCmdEnum & host_command)
                 static unsigned long purge_last = 0;
                 unsigned long purge_elapsed = ((now - purge_last) / 1000);
                 WebText("Purging old events/stats, last purge ET %d secs, IntSrcReg - %02X\n", purge_elapsed, interrupt_reg_value);
-                Serial.printf("Purging old events/stats , last purge ET %d secs, IntSrcReg - %02X\n", purge_elapsed, interrupt_reg_value);
                 purge_last = now; // Save the current time for the next purge
                 break;
             }
