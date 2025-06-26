@@ -113,13 +113,19 @@ try to remember to bump this each time a functional mod is done
                             works again.
 22-Jun-2025 w9zv    v6.4    RingBuffer ran out of slots on dump command so the first couple of lines were overwritten (expected behavior for ringbuff), increased 
                             slots by 20 and reduced the max stringlengh to 128/slot since i have never seen it exceed this. also dont trim JSON INFO tag to 
-                            retain all formatting as is in jscript. 
+                            retain all formatting as is in jscript.
+23-Jun-2025 w9zv    v6.41   expanded length of ring buffer slot to 160 characters, to eliminate truncating long strings, i got too aggressive in 6.4 reducing it
+26-Jun-2025 w9zv    v7.0    added web page logging of WebText in the textbox on the web page.  this is to allow the user enable and disable logging of the 
+                            to a file called LD_logfile.txt 256k buffer uses browser local storage to store the log file, when downloaded the log file is cleared.
+                            added logfile enable/disable buttons to the web page, and a dialog box when disabling the logging to download/clear, disable only, or 
+                            cancel.
 
 */
 
+
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v6.4";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v7.0";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
