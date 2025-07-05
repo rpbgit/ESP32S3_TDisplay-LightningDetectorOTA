@@ -119,13 +119,15 @@ try to remember to bump this each time a functional mod is done
                             to a file called LD_logfile.txt 256k buffer uses browser local storage to store the log file, when downloaded the log file is cleared.
                             added logfile enable/disable buttons to the web page, and a dialog box when disabling the logging to download/clear, disable only, or 
                             cancel.
+04-Jul-2025 w9zv    v7.1    removed local copy of the TFT_eSPI locking its version.  Now using the version from the library manager latest.  Required changes
+                            to platformio.ini to provide configuration of the TFT_eSPI library.  updated to latest Espressif tools 6.11.0
 
 */
 
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v7.0";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v7.1";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
