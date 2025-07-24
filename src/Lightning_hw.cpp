@@ -2,6 +2,7 @@
 
 */
 #include <Arduino.h>
+#include <Preferences.h> // Added for saving preferences
 #define DISABLE_ALL_LIBRARY_WARNINGS 1 // disable all library warnings for tft_eSPI
 #include "TFT_eSPI.h"
 #include <Wire.h>
@@ -121,13 +122,14 @@ try to remember to bump this each time a functional mod is done
                             cancel.
 04-Jul-2025 w9zv    v7.1    removed local copy of the TFT_eSPI locking its version.  Now using the version from the library manager latest.  Required changes
                             to platformio.ini to provide configuration of the TFT_eSPI library.  updated to latest Espressif tools 6.11.0
+24-Jul-2025 w9zv    v8.0    added support for non-volatile saving of AS3935 configuration preferences (and other if desired) and restoring them, added SAVEPREFS command.
 
 */
 
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v7.1";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v8.0";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -177,6 +179,7 @@ void handle_EVTDSBL_Command(char *param);
 void handle_CALMODE_Command(char *param);
 void handle_STRTRH_Command(char *param);  // strike threshold command, used to set the strike rate threshold for the station management
 void handle_PWRRQST_Command(char *param); // turn power on/off the station via commandline
+void handle_SAVEPREF_Command(char *param); // save current AS3935 register settings to preferences
 
 void sensor_register_test( char *param );
 void handle_DUMP_Command(char *param);
@@ -204,6 +207,8 @@ CommandEntry commandTable[] = {
     {"calosc",   handle_CALOSC_Command },
     {"strtrh",   handle_STRTRH_Command },
     {"powreq",   handle_PWRRQST_Command },
+    {"savprefs", handle_SAVEPREF_Command }, // Added save preferences 
+
 
     // put any new commands above this line so that the reset command doesnt recurse on itself or do help
     {"regtst",   sensor_register_test }, 
@@ -231,7 +236,7 @@ AS3935SPI Sensor(SS, DetectorIntrReqPin); // constructor needs chipselect and in
 #define PWR_BUTTON_INTEGRATION_TIME 750  // time in milliseconds to wait for the power button to be pressed before toggling the power state
 
 /*
-14-Feb-2025 w9zv    this is now in a compiler define file so that it always compiles with the correct setting.
+14-Feb-2025 w9zv    this is now in a compiler define file (platformio.ini) so that it always compiles with the correct setting.
 // comment this out if actually using hardware, otherwise we simulate it with GPIO RELAY_SENSE_STATE set for an output 
 #define SIMULATE_HARDWARE_MODE 1  
 */
@@ -463,11 +468,36 @@ void setup2()
 		//while (1);
 	} else
 		WebText("RCO Calibration passed.\n");
+    
+    // Initialize Preferences
+    Preferences prefs;
+    prefs.begin("AS3935", false); // Open namespace "AS3935" in read/write mode
+    // Load saved preferences, if nothing saved, use the default values defined.
+    int savedNoiseFloor =           prefs.getInt("noise_floor",         AS3935MI::AS3935_NFL_2);
+    int savedWatchdog =             prefs.getInt("watchdog",            AS3935MI::AS3935_WDTH_2);
+    int savedSpikeRejection =       prefs.getInt("spike_rejection",     AS3935MI::AS3935_SREJ_2);
+    int savedLightningThreshold =   prefs.getInt("lightning_thresh",    AS3935MI::AS3935_MNL_1);
+    int savedAfe =                  prefs.getInt("afe",                 AS3935MI::AS3935_OUTDOORS);
+    bool savedMaskDisturbers =      prefs.getBool("mask_disturbers",    false);
+    int savedDivisionRatio =        prefs.getInt("division_ratio",      16);
+    int savedAntennaTuning =        prefs.getInt("antenna_tuning",      0);
+    gStrikeRateThreshold =          prefs.getULong("strike_rate_threshold", 5); // restore from preferences, default 5
 
+    // Apply loaded settings
+    Sensor.writeNoiseFloorThreshold(savedNoiseFloor);
+    Sensor.writeWatchdogThreshold(savedWatchdog);
+    Sensor.writeSpikeRejection(savedSpikeRejection);
+    Sensor.writeMinLightnings(savedLightningThreshold);
+    Sensor.writeAFE(savedAfe == INDOOR ? AS3935MI::AS3935_INDOORS : AS3935MI::AS3935_OUTDOORS);
+    Sensor.writeMaskDisturbers(savedMaskDisturbers);
+    Sensor.writeDivisionRatio(savedDivisionRatio);
+    Sensor.writeAntennaTuning(savedAntennaTuning);
+
+    prefs.end(); // Close the preferences
     // "Disturbers" are events that are false lightning events. If you find
     // yourself seeing a lot of disturbers you can have the chip not report those
     // events on the interrupt lines.   Default is not to mask them.
-    Sensor.writeMaskDisturbers(false);
+    //Sensor.writeMaskDisturbers(false);
 
     int maskVal = Sensor.readMaskDisturbers();
     Serial.printf("Are disturbers being masked: ");
@@ -479,7 +509,7 @@ void setup2()
     // The lightning detector defaults to an indoor setting (less
     // gain/sensitivity), if you plan on using this outdoors Default is INDOORS
     // uncomment the following line:
-    Sensor.writeAFE(AS3935MI::AS3935_INDOORS);
+    //Sensor.writeAFE(AS3935MI::AS3935_INDOORS);
 
     int enviVal = Sensor.readAFE();
     Serial.printf("Are we set for indoor or outdoor: ");
@@ -493,7 +523,7 @@ void setup2()
     // Noise floor setting from 1-7, one being the lowest. Default setting is
     // two. If you need to check the setting, the corresponding function for
     // reading the function follows.  Device default is 2 (NFL_2), which is the
-    Sensor.writeNoiseFloorThreshold(AS3935MI::AS3935_NFL_2);
+    // Sensor.writeNoiseFloorThreshold(AS3935MI::AS3935_NFL_2);
 
     int noiseVal = Sensor.readNoiseFloorThreshold();
     Serial.printf("Noise Level is set at: %#04x\n", noiseVal);
@@ -501,7 +531,7 @@ void setup2()
     // Watchdog threshold setting can be from 1-10, one being the lowest. Default setting is
     // 2. If you need to check the setting, the corresponding function for
     // reading the function follows.
-    Sensor.writeWatchdogThreshold(AS3935MI::AS3935_WDTH_2);
+    // Sensor.writeWatchdogThreshold(AS3935MI::AS3935_WDTH_2);
 
     int watchDogVal = Sensor.readWatchdogThreshold();
     Serial.printf("Watchdog Threshold is set to: %#04x\n", watchDogVal);
@@ -512,7 +542,7 @@ void setup2()
     // The shape of the spike is analyzed during the chip's
     // validation routine. You can round this spike at the cost of sensitivity to
     // distant events.
-    Sensor.writeSpikeRejection(AS3935MI::AS3935_SREJ_2);
+    // Sensor.writeSpikeRejection(AS3935MI::AS3935_SREJ_2);
 
     int spikeVal = Sensor.readSpikeRejection();
     Serial.printf("Spike Rejection is set to:  %#04x\n", spikeVal);
@@ -521,7 +551,7 @@ void setup2()
     // For example you will only get an interrupt after five lightning strikes
     // instead of one. Default is one, and it takes settings of 1, 5, 9 and 16.
     // Followed by its corresponding read function. 
-    Sensor.writeMinLightnings(AS3935MI::AS3935_MNL_1);
+    // Sensor.writeMinLightnings(AS3935MI::AS3935_MNL_1);
 
     uint8_t lightVal = Sensor.readMinLightnings();
     Serial.printf("The minimum number of lightning strikes register value is: %#04x\n", lightVal);
@@ -1462,6 +1492,50 @@ void handle_PWRRQST_Command(char *param) // turn power on/off the station via co
     WebText("\t- Power status is = %s\n", digitalRead(RELAY_SENSE_STATE) ? "ON" : "OFF" );
 }
 
+// save the current AS3935 settings so NV memory, so they can be restored on reboot.
+void handle_SAVEPREF_Command(char *param)
+{
+    if (param != NULL) {
+        long regval = cp.parseParameter(param);
+        if (regval > 0) {
+            Preferences prefs;
+            prefs.begin("AS3935", false); // Open namespace "AS3935" in read/write mode
+
+            String changedKeys = "";
+            int noiseFloor      = Sensor.readNoiseFloorThreshold();
+            int watchdog        = Sensor.readWatchdogThreshold();
+            int spikeRejection  = Sensor.readSpikeRejection();
+            int lightningThresh = Sensor.readMinLightnings();
+            int afe             = Sensor.readAFE();
+            bool maskDisturbers = Sensor.readMaskDisturbers();
+            int divisionRatio   = Sensor.readDivisionRatio();
+            int antennaTuning   = Sensor.readAntennaTuning();
+            unsigned long strikeRateThreshold = gStrikeRateThreshold;
+
+            if (prefs.getInt("noise_floor",      -1) != noiseFloor)      { prefs.putInt("noise_floor",      noiseFloor);      changedKeys += "noise_floor "; }
+            if (prefs.getInt("watchdog",         -1) != watchdog)        { prefs.putInt("watchdog",         watchdog);        changedKeys += "watchdog "; }
+            if (prefs.getInt("spike_rejection",  -1) != spikeRejection)  { prefs.putInt("spike_rejection",  spikeRejection);  changedKeys += "spike_rejection "; }
+            if (prefs.getInt("lightning_thresh", -1) != lightningThresh) { prefs.putInt("lightning_thresh", lightningThresh); changedKeys += "lightning_thresh "; }
+            if (prefs.getInt("afe",              -1) != afe)             { prefs.putInt("afe",              afe);             changedKeys += "afe "; }
+            if (prefs.getBool("mask_disturbers", !maskDisturbers) != maskDisturbers) { prefs.putBool("mask_disturbers", maskDisturbers); changedKeys += "mask_disturbers "; }
+            if (prefs.getInt("division_ratio",   -1) != divisionRatio)   { prefs.putInt("division_ratio",   divisionRatio);   changedKeys += "division_ratio "; }
+            if (prefs.getInt("antenna_tuning",   -1) != antennaTuning)   { prefs.putInt("antenna_tuning",   antennaTuning);   changedKeys += "antenna_tuning "; }
+            if (prefs.getULong("strike_rate_threshold", 0xFFFFFFFF) != strikeRateThreshold) { prefs.putULong("strike_rate_threshold", strikeRateThreshold); changedKeys += "strike_rate_threshold "; }
+
+            prefs.end(); // close the preferences namespace
+
+            if (changedKeys.length() > 0)
+                WebText("\t- AS3935 settings saved to preferences. Changed: %s\n", changedKeys.c_str());
+            else
+                WebText("\t- AS3935 settings NOT saved (no changes detected).\n");
+        } else {
+            WebText("\t- SAVEPREF requires a non-zero parameter to take effect.\n");
+        }
+    } else {
+        WebText("\t- SAVEPREF requires a non-zero parameter to take effect.\n");
+    }
+}
+
 void handle_HELP_Command(char *param) {
   if (param == NULL) {
     // Handle parameterless input
@@ -1487,9 +1561,10 @@ void handle_HELP_Command(char *param) {
     WebText("\n  SIM     ----- turns on simulated event generator - 0 = OFF, nonzero value = time in MS between event gen ");
     WebText("\n  SPIKE   ----- Spike rejection filter, R/W, default 0x02, REG0x02, bits [3:0]");
     WebText("\n  THRESH  ----- Lightning Threshold, R/W, number of strikes before int pin triggered, default 0x0 (One stroke), manpage 35, REG0x02, bits [5:4]");
-    WebText("\n  TUNECAP ----- Tuning Cap Register, R/W, 0-15 dec or 0x0-0xe, each step is 8pf, max of 16 possible steps REG0x08[3:0]");
+    WebText("\n  TUNECAP ----- Tuning Cap Register, R/W, 0-15 dec or 0x0-0x0e, each step is 8pf, max of 16 possible steps REG0x08[3:0]");
     WebText("\n  STRTRH  ----- Strike Rate Threshold, strike rate/min that if exceeded will trigger power off in station mgmt, default 5");
     WebText("\n  POWREQ  ----- Power Relay Request, R/W, 0 = OFF, non-zero = ON, toggles the power relay state");
+    WebText("\n  SAVEPREF ----- Saves current AS3935 config to preferences if given a non-zero parameter; lists which settings changed.");
     WebText("\n  ?       ----- print usage \n");
   } else {
     long junk = cp.parseParameter(param);
