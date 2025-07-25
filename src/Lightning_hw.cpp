@@ -122,14 +122,14 @@ try to remember to bump this each time a functional mod is done
                             cancel.
 04-Jul-2025 w9zv    v7.1    removed local copy of the TFT_eSPI locking its version.  Now using the version from the library manager latest.  Required changes
                             to platformio.ini to provide configuration of the TFT_eSPI library.  updated to latest Espressif tools 6.11.0
-24-Jul-2025 w9zv    v8.0    added support for non-volatile saving of AS3935 configuration preferences (and other if desired) and restoring them, added SAVEPREFS command.
+24-Jul-2025 w9zv    v8.1    added support for non-volatile saving of AS3935 configuration preferences (and other if desired) and restoring them, added SAVEPREFS command.
 
 */
 
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v8.0";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v8.1";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -299,7 +299,7 @@ extern unsigned long gLongest_loop_time;
 bool gPowerCondition = false; // flag to indicate we have requested a power condition change, used by the power_relay_fsm() function
 
 // global variable used at the end of the station management placed here for testing
-unsigned long gStrikeRateThreshold = 5;  
+unsigned long gAlarmThresh = 5;  
 
 // declare the global structure and a pointer to it that is shared between the hardware handling done here
 // and the web page message population and status updates.  
@@ -471,23 +471,30 @@ void setup2()
     
     // Initialize Preferences
     Preferences prefs;
+// // comment this out to not clear the preferences on startup, this is useful for testing
+// prefs.begin("AS3935", false); // Open namespace "AS3935" in read/write mode
+// prefs.clear(); // Erase all keys/values in the "AS3935" namespace
+// prefs.end();
+// delay(100); // give it time to clear
+
     prefs.begin("AS3935", false); // Open namespace "AS3935" in read/write mode
     // Load saved preferences, if nothing saved, use the default values defined.
-    int savedNoiseFloor =           prefs.getInt("noise_floor",         AS3935MI::AS3935_NFL_2);
-    int savedWatchdog =             prefs.getInt("watchdog",            AS3935MI::AS3935_WDTH_2);
-    int savedSpikeRejection =       prefs.getInt("spike_rejection",     AS3935MI::AS3935_SREJ_2);
-    int savedLightningThreshold =   prefs.getInt("lightning_thresh",    AS3935MI::AS3935_MNL_1);
-    int savedAfe =                  prefs.getInt("afe",                 AS3935MI::AS3935_OUTDOORS);
-    bool savedMaskDisturbers =      prefs.getBool("mask_disturbers",    false);
-    int savedDivisionRatio =        prefs.getInt("division_ratio",      16);
-    int savedAntennaTuning =        prefs.getInt("antenna_tuning",      0);
-    gStrikeRateThreshold =          prefs.getULong("strike_rate_threshold", 5); // restore from preferences, default 5
+    // maximum length of a prefs key is 15 characters, so we use short names.
+    uint8_t  savedNoiseFloor =           prefs.getUChar("NoiseFloor",         AS3935MI::AS3935_NFL_2);
+    uint8_t  savedWatchdog =             prefs.getUChar("Watchdog",           AS3935MI::AS3935_WDTH_2);
+    uint8_t  savedSpikeRejection =       prefs.getUChar("SpikeRejection",     AS3935MI::AS3935_SREJ_2);
+    uint8_t  savedStrikeThresh =         prefs.getUChar("StrikeThresh",       AS3935MI::AS3935_MNL_1);
+    uint8_t  savedAfe =                  prefs.getUChar("AFE",                AS3935MI::AS3935_OUTDOORS);
+    bool     savedMaskDisturbers =       prefs.getBool("MaskDisturbers",      false);
+    uint8_t  savedDivisionRatio =        prefs.getUChar("DivisionRatio",      16);
+    uint8_t  savedAntennaTuning =        prefs.getUChar("AntennaTuning",      0);
+    gAlarmThresh =                       prefs.getULong("AlarmThresh",        5); // restore from preferences, default 5
 
     // Apply loaded settings
     Sensor.writeNoiseFloorThreshold(savedNoiseFloor);
     Sensor.writeWatchdogThreshold(savedWatchdog);
     Sensor.writeSpikeRejection(savedSpikeRejection);
-    Sensor.writeMinLightnings(savedLightningThreshold);
+    Sensor.writeMinLightnings(savedStrikeThresh);
     Sensor.writeAFE(savedAfe == INDOOR ? AS3935MI::AS3935_INDOORS : AS3935MI::AS3935_OUTDOORS);
     Sensor.writeMaskDisturbers(savedMaskDisturbers);
     Sensor.writeDivisionRatio(savedDivisionRatio);
@@ -499,7 +506,7 @@ void setup2()
     // events on the interrupt lines.   Default is not to mask them.
     //Sensor.writeMaskDisturbers(false);
 
-    int maskVal = Sensor.readMaskDisturbers();
+    uint8_t maskVal = Sensor.readMaskDisturbers();
     Serial.printf("Are disturbers being masked: ");
     if (maskVal == 1)
         Serial.printf("YES\n");
@@ -511,7 +518,7 @@ void setup2()
     // uncomment the following line:
     //Sensor.writeAFE(AS3935MI::AS3935_INDOORS);
 
-    int enviVal = Sensor.readAFE();
+    uint8_t enviVal = Sensor.readAFE();
     Serial.printf("Are we set for indoor or outdoor: ");
     if (enviVal == AS3935MI::AS3935_INDOORS)
         Serial.printf("Indoor.\n");
@@ -525,7 +532,7 @@ void setup2()
     // reading the function follows.  Device default is 2 (NFL_2), which is the
     // Sensor.writeNoiseFloorThreshold(AS3935MI::AS3935_NFL_2);
 
-    int noiseVal = Sensor.readNoiseFloorThreshold();
+    uint8_t noiseVal = Sensor.readNoiseFloorThreshold();
     Serial.printf("Noise Level is set at: %#04x\n", noiseVal);
 
     // Watchdog threshold setting can be from 1-10, one being the lowest. Default setting is
@@ -533,7 +540,7 @@ void setup2()
     // reading the function follows.
     // Sensor.writeWatchdogThreshold(AS3935MI::AS3935_WDTH_2);
 
-    int watchDogVal = Sensor.readWatchdogThreshold();
+    uint8_t watchDogVal = Sensor.readWatchdogThreshold();
     Serial.printf("Watchdog Threshold is set to: %#04x\n", watchDogVal);
 
     // Spike Rejection setting from 1-11, one being the lowest. Default setting is
@@ -544,7 +551,7 @@ void setup2()
     // distant events.
     // Sensor.writeSpikeRejection(AS3935MI::AS3935_SREJ_2);
 
-    int spikeVal = Sensor.readSpikeRejection();
+    uint8_t spikeVal = Sensor.readSpikeRejection();
     Serial.printf("Spike Rejection is set to:  %#04x\n", spikeVal);
 
     // This setting will change when the lightning detector issues an interrupt.
@@ -858,11 +865,11 @@ void station_management(int interrupt_source, int distance, long energy, const s
     }
 
     // If the strike rate is above the threshold, request power off only once
-    if (stats.strikeRate >= gStrikeRateThreshold) {
+    if (stats.strikeRate >= gAlarmThresh) {
         if (!powerOffRequested) {
             power_relay(OFF);
             powerOffRequested = true;
-            WebText("\n>>>>> Strike rate above threshold (%d), requesting power off. <<<<<\n", gStrikeRateThreshold);
+            WebText("\n>>>>> Strike rate above threshold (%d), requesting power off. <<<<<\n", gAlarmThresh);
         }
         // Reset the timer since we're still above threshold
         lastBelowThresholdTime = now;
@@ -1477,9 +1484,9 @@ void handle_GETMAXLOOPTIME_Comnmand(char *param)
 
 void handle_STRTRH_Command(char* param){
     if (param != NULL) {
-        gStrikeRateThreshold = cp.parseParameter(param); // if i have a parameter, use it to assign it
+        gAlarmThresh = cp.parseParameter(param); // if i have a parameter, use it to assign it
     }
-    WebText("\t- Strike Rate Threshold = %d\n", gStrikeRateThreshold);
+    WebText("\t- Strike Rate Threshold = %d\n", gAlarmThresh);
 }
 
 void handle_PWRRQST_Command(char *param) // turn power on/off the station via commandline
@@ -1502,25 +1509,25 @@ void handle_SAVEPREF_Command(char *param)
             prefs.begin("AS3935", false); // Open namespace "AS3935" in read/write mode
 
             String changedKeys = "";
-            int noiseFloor      = Sensor.readNoiseFloorThreshold();
-            int watchdog        = Sensor.readWatchdogThreshold();
-            int spikeRejection  = Sensor.readSpikeRejection();
-            int lightningThresh = Sensor.readMinLightnings();
-            int afe             = Sensor.readAFE();
+            u_int8_t noiseFloor      = Sensor.readNoiseFloorThreshold();
+            u_int8_t watchdog        = Sensor.readWatchdogThreshold();
+            u_int8_t spikeRejection  = Sensor.readSpikeRejection(); 
+            u_int8_t strikeThreshold  = Sensor.readMinLightnings();
+            u_int8_t afe             = Sensor.readAFE();
             bool maskDisturbers = Sensor.readMaskDisturbers();
-            int divisionRatio   = Sensor.readDivisionRatio();
-            int antennaTuning   = Sensor.readAntennaTuning();
-            unsigned long strikeRateThreshold = gStrikeRateThreshold;
+            u_int8_t divisionRatio   = Sensor.readDivisionRatio();
+            u_int8_t antennaTuning   = Sensor.readAntennaTuning();
+            unsigned long strikeRateThreshold = gAlarmThresh;
 
-            if (prefs.getInt("noise_floor",      -1) != noiseFloor)      { prefs.putInt("noise_floor",      noiseFloor);      changedKeys += "noise_floor "; }
-            if (prefs.getInt("watchdog",         -1) != watchdog)        { prefs.putInt("watchdog",         watchdog);        changedKeys += "watchdog "; }
-            if (prefs.getInt("spike_rejection",  -1) != spikeRejection)  { prefs.putInt("spike_rejection",  spikeRejection);  changedKeys += "spike_rejection "; }
-            if (prefs.getInt("lightning_thresh", -1) != lightningThresh) { prefs.putInt("lightning_thresh", lightningThresh); changedKeys += "lightning_thresh "; }
-            if (prefs.getInt("afe",              -1) != afe)             { prefs.putInt("afe",              afe);             changedKeys += "afe "; }
-            if (prefs.getBool("mask_disturbers", !maskDisturbers) != maskDisturbers) { prefs.putBool("mask_disturbers", maskDisturbers); changedKeys += "mask_disturbers "; }
-            if (prefs.getInt("division_ratio",   -1) != divisionRatio)   { prefs.putInt("division_ratio",   divisionRatio);   changedKeys += "division_ratio "; }
-            if (prefs.getInt("antenna_tuning",   -1) != antennaTuning)   { prefs.putInt("antenna_tuning",   antennaTuning);   changedKeys += "antenna_tuning "; }
-            if (prefs.getULong("strike_rate_threshold", 0xFFFFFFFF) != strikeRateThreshold) { prefs.putULong("strike_rate_threshold", strikeRateThreshold); changedKeys += "strike_rate_threshold "; }
+            if (prefs.getUChar("NoiseFloor",      -1)  != noiseFloor)               { prefs.putUChar("NoiseFloor",      noiseFloor);      changedKeys += "NoiseFloor "; }
+            if (prefs.getUChar("Watchdog",         -1) != watchdog)                 { prefs.putUChar("Watchdog",         watchdog);       changedKeys += "Watchdog "; }
+            if (prefs.getUChar("SpikeRejection",  -1)  != spikeRejection)           { prefs.putUChar("SpikeRejection",  spikeRejection);  changedKeys += "SpikeRejection "; }
+            if (prefs.getUChar("StrikeThresh", -1)     != strikeThreshold)          { prefs.putUChar("StrikeThresh",    strikeThreshold);    changedKeys += "StrikeThresh "; }
+            if (prefs.getUChar("AFE",              -1) != afe)                      { prefs.putUChar("AFE",              afe);            changedKeys += "AFE "; }
+            if (prefs.getBool("MaskDisturbers", !maskDisturbers) != maskDisturbers) { prefs.putBool("MaskDisturbers",   maskDisturbers);    changedKeys += "MaskDisturbers "; }
+            if (prefs.getUChar("DivisionRatio",   -1) != divisionRatio)             { prefs.putUChar("DivisionRatio",   divisionRatio);   changedKeys += "DivisionRatio "; }
+            if (prefs.getUChar("AntennaTuning",   -1) != antennaTuning)             { prefs.putUChar("AntennaTuning",   antennaTuning);   changedKeys += "AntennaTuning "; }
+            if (prefs.getULong("AlarmThresh",     -1) != strikeRateThreshold)       { prefs.putULong("AlarmThresh",     strikeRateThreshold); changedKeys += "AlarmThresh "; }
 
             prefs.end(); // close the preferences namespace
 
