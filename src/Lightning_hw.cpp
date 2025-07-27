@@ -123,13 +123,15 @@ try to remember to bump this each time a functional mod is done
 04-Jul-2025 w9zv    v7.1    removed local copy of the TFT_eSPI locking its version.  Now using the version from the library manager latest.  Required changes
                             to platformio.ini to provide configuration of the TFT_eSPI library.  updated to latest Espressif tools 6.11.0
 24-Jul-2025 w9zv    v8.1    added support for non-volatile saving of AS3935 configuration preferences (and other if desired) and restoring them, added SAVEPREFS command.
+26-Jul-2025 w9zv    v8.2    corrected typos in comments and documentation and help text, strtrh now almtrh.  The almtrh command is used to set the strike rate 
+                            threshold for the station management function. 
 
 */
 
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v8.1";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v8.2";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -177,7 +179,7 @@ void handle_RESET_Command(char *param);
 void handle_CALOSC_Command(char *param);
 void handle_EVTDSBL_Command(char *param);
 void handle_CALMODE_Command(char *param);
-void handle_STRTRH_Command(char *param);  // strike threshold command, used to set the strike rate threshold for the station management
+void handle_STRTRH_Command(char *param);  // alarm threshold command, used to set the strike rate threshold for the station management
 void handle_PWRRQST_Command(char *param); // turn power on/off the station via commandline
 void handle_SAVEPREF_Command(char *param); // save current AS3935 register settings to preferences
 
