@@ -205,7 +205,7 @@ CommandEntry commandTable[] = {
     {"inv",      handle_DISPLAYINVERT_Command },
     {"calant",   handle_CALANT_Command }, 
     {"calosc",   handle_CALOSC_Command },
-    {"strtrh",   handle_STRTRH_Command },
+    {"almtrh",   handle_STRTRH_Command },
     {"powreq",   handle_PWRRQST_Command },
     {"savprefs", handle_SAVEPREF_Command }, // Added save preferences 
 
@@ -298,8 +298,8 @@ statistics_struct gStats = {0};
 extern unsigned long gLongest_loop_time;
 bool gPowerCondition = false; // flag to indicate we have requested a power condition change, used by the power_relay_fsm() function
 
-// global variable used at the end of the station management placed here for testing
-unsigned long gAlarmThresh = 5;  
+// global variable used that determins the strike rate threshold for the station management function that will turn off the power to the station
+unsigned long gAlarmThresh = 5;   // default strike rate threshold for the station management function, in strikes per minute
 
 // declare the global structure and a pointer to it that is shared between the hardware handling done here
 // and the web page message population and status updates.  
@@ -1517,7 +1517,7 @@ void handle_SAVEPREF_Command(char *param)
             bool maskDisturbers = Sensor.readMaskDisturbers();
             u_int8_t divisionRatio   = Sensor.readDivisionRatio();
             u_int8_t antennaTuning   = Sensor.readAntennaTuning();
-            unsigned long strikeRateThreshold = gAlarmThresh;
+            unsigned long alarmRateThreshold = gAlarmThresh;
 
             if (prefs.getUChar("NoiseFloor",      -1)  != noiseFloor)               { prefs.putUChar("NoiseFloor",      noiseFloor);      changedKeys += "NoiseFloor "; }
             if (prefs.getUChar("Watchdog",         -1) != watchdog)                 { prefs.putUChar("Watchdog",         watchdog);       changedKeys += "Watchdog "; }
@@ -1527,7 +1527,10 @@ void handle_SAVEPREF_Command(char *param)
             if (prefs.getBool("MaskDisturbers", !maskDisturbers) != maskDisturbers) { prefs.putBool("MaskDisturbers",   maskDisturbers);    changedKeys += "MaskDisturbers "; }
             if (prefs.getUChar("DivisionRatio",   -1) != divisionRatio)             { prefs.putUChar("DivisionRatio",   divisionRatio);   changedKeys += "DivisionRatio "; }
             if (prefs.getUChar("AntennaTuning",   -1) != antennaTuning)             { prefs.putUChar("AntennaTuning",   antennaTuning);   changedKeys += "AntennaTuning "; }
-            if (prefs.getULong("AlarmThresh",     -1) != strikeRateThreshold)       { prefs.putULong("AlarmThresh",     strikeRateThreshold); changedKeys += "AlarmThresh "; }
+            
+            // Alarm threshold is a strike rate threshold, so we store it as an unsigned long
+            // and it is used to trigger the power off in station management code.
+            if (prefs.getULong("AlarmThresh",     -1) != alarmRateThreshold)       { prefs.putULong("AlarmThresh",     alarmRateThreshold); changedKeys += "AlarmThresh "; }
 
             prefs.end(); // close the preferences namespace
 
@@ -1569,9 +1572,9 @@ void handle_HELP_Command(char *param) {
     WebText("\n  SPIKE   ----- Spike rejection filter, R/W, default 0x02, REG0x02, bits [3:0]");
     WebText("\n  THRESH  ----- Lightning Threshold, R/W, number of strikes before int pin triggered, default 0x0 (One stroke), manpage 35, REG0x02, bits [5:4]");
     WebText("\n  TUNECAP ----- Tuning Cap Register, R/W, 0-15 dec or 0x0-0x0e, each step is 8pf, max of 16 possible steps REG0x08[3:0]");
-    WebText("\n  STRTRH  ----- Strike Rate Threshold, strike rate/min that if exceeded will trigger power off in station mgmt, default 5");
+    WebText("\n  ALMTRH  ----- Alarm (strike) Rate Threshold, strike rate/min that if exceeded will trigger power off in station mgmt, default 5");
     WebText("\n  POWREQ  ----- Power Relay Request, R/W, 0 = OFF, non-zero = ON, toggles the power relay state");
-    WebText("\n  SAVEPREF ----- Saves current AS3935 config to preferences if given a non-zero parameter; lists which settings changed.");
+    WebText("\n  SAVPREFS ----- Saves current AS3935 config to preferences if given a non-zero parameter; lists which settings changed.");
     WebText("\n  ?       ----- print usage \n");
   } else {
     long junk = cp.parseParameter(param);
