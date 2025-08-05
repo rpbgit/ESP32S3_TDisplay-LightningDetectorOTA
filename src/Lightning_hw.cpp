@@ -125,13 +125,15 @@ try to remember to bump this each time a functional mod is done
 24-Jul-2025 w9zv    v8.1    added support for non-volatile saving of AS3935 configuration preferences (and other if desired) and restoring them, added SAVEPREFS command.
 26-Jul-2025 w9zv    v8.2    corrected typos in comments and documentation and help text, strtrh now almtrh.  The almtrh command is used to set the strike rate 
                             threshold for the station management function. 
-
+05-Aug-2025 w9zv    v9.0    new feature, added mDNS support for hostname resolution, so the storm monitor can be accessed by its hostname rather than IP address.  
+                            unique hostname derived by adding the last two octets (in hex) from MAC address appended to HOSTNAME, added some serial 
+                            port messages to indicate above.
 */
 
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v8.2";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v9.0";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
