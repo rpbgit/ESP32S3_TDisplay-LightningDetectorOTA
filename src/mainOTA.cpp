@@ -8,6 +8,7 @@ this file manages the wifi connections and communications to the web client for 
 #include <string.h>
 #include "Lightning_Web.h"       // .h file that stores your html page code
 #include <WiFi.h>           // standard library
+#include <ESPmDNS.h>        // mDNS for local hostname resolution
 #include <ESPAsyncWebServer.h> // Async web server library
 #include <ElegantOTA.h>   // ElegantOTA lib
 #include "defs.h"
@@ -254,8 +255,21 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
 {
     bWiFi_Connected = true; // Only after we get the IP Address, can we do things.
 
-    Serial.print("\tWiFi EVENT_WIFI_STA_GOT_IP address: ");
+    Serial.print("\n\tWiFi EVENT_WIFI_STA_GOT_IP address: ");
     Serial.println(WiFi.localIP());
+    Serial.printf("\tHostname set to: %s\n", WiFi.getHostname());
+    
+    // Initialize mDNS for local hostname resolution
+    if (!MDNS.begin(WiFi.getHostname())) {
+        Serial.println("\tError setting up mDNS responder!");
+    } else {
+        Serial.printf("\tmDNS responder started. Hostname: %s.local\n", WiFi.getHostname());
+        Serial.printf("\tTry accessing: http://%s.local/\n", WiFi.getHostname());
+        // Add service to mDNS registry
+        MDNS.addService("http", "tcp", 80);
+        MDNS.addService("lightning", "tcp", 80);
+        Serial.println("\tmDNS services registered (http, lightning)");
+    }
 }
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
@@ -306,7 +320,7 @@ void PrintWifiStatus()
     Serial.print(F(", IP Address: "));
     Serial.print(Actual_IP);
 	
-    Serial.printf(",  Hostname: %s\n", WiFi.getHostname());
+    Serial.printf(",  Hostname: %s ", WiFi.getHostname());
   
     // print the received signal strength:
     long rssi = WiFi.RSSI();
@@ -556,26 +570,46 @@ void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_
     useful for a device that may be moved around and connected to different AP's, like iphone vs local wifi AP.
     11-Jan-2025 w9zv
 */
+
+// Generate unique hostname using last 4 hex digits of MAC address
+String generateUniqueHostname() {
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    
+    // Use last 2 octets of MAC address as 4-character hex suffix
+    char macSuffix[5]; // 4 chars + null terminator
+    snprintf(macSuffix, sizeof(macSuffix), "%02X%02X", mac[4], mac[5]);
+    
+    // Create unique hostname: storm-monitor-AB12
+    String uniqueHostname = String(HOSTNAME) + String(macSuffix);
+    
+    return uniqueHostname;
+}
+
 void startupWiFiWithList()
 {
-   // Initialize WiFi
-   WiFi.setHostname(HOSTNAME); // set the hostname for the ESP32
-   WiFi.mode(WIFI_STA);
-   WiFi.disconnect();
-   //WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
-   delay(100);
-   
-   // Scan for available networks
-   Serial.println("Scanning for WiFi networks... stby");
-   int numNetworks = WiFi.scanNetworks();
-   showWiFiNetworksFound(numNetworks);
-   
-   // Try to connect to each AP in the priority list
-   for (int i = 0; i < numAPs; i++) {
-       for (int j = 0; j < numNetworks; j++) {
-           if (strcmp(WiFi.SSID(j).c_str(), apList[i].ssid) == 0) {
-               Serial.printf("Trying to connect to: %s ", apList[i].ssid);
-               
+    // Generate unique hostname based on MAC address
+    String uniqueHostname = generateUniqueHostname();
+    Serial.printf("Setting unique hostname: %s\n", uniqueHostname.c_str());
+    
+    // Initialize WiFi with unique hostname
+    WiFi.setHostname(uniqueHostname.c_str());
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+    // WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+    delay(100);
+
+    // Scan for available networks
+    Serial.println("Scanning for WiFi networks... stby");
+    int numNetworks = WiFi.scanNetworks();
+    showWiFiNetworksFound(numNetworks);
+
+    // Try to connect to each AP in the priority list
+    for (int i = 0; i < numAPs; i++) {
+        for (int j = 0; j < numNetworks; j++) {
+            if (strcmp(WiFi.SSID(j).c_str(), apList[i].ssid) == 0) {
+                Serial.printf("Trying to connect to: %s ", apList[i].ssid);
+
                 WiFi.begin(apList[i].ssid, apList[i].password);
 
                 // Wait for connection
@@ -588,7 +622,7 @@ void startupWiFiWithList()
 
                 if (WiFi.status() == WL_CONNECTED) {
                     Serial.printf("Connected to %s\n", apList[i].ssid);
-                    //Serial.printf("\nConnected !\n");
+                    // Serial.printf("\nConnected !\n");
                     break; // stop trying to connect to other AP's found in the scan
                 } else {
                     Serial.printf("\nFailed to connect to %s\n", apList[i].ssid);
@@ -599,7 +633,7 @@ void startupWiFiWithList()
             break; // stop trying to connect to other AP's on the preferred list
         }
     }
-    // Delete the scan result to free memory 
+    // Delete the scan result to free memory
     WiFi.scanDelete();
 
     if (WiFi.status() != WL_CONNECTED) {
