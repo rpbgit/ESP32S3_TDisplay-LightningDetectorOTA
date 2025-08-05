@@ -559,23 +559,23 @@ void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_
 void startupWiFiWithList()
 {
    // Initialize WiFi
-    WiFi.setHostname(HOSTNAME);   // NOTE: MUST be called BEFORE WiFi.Mode() is set else the default is used.
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
-    delay(100);
-
-    // Scan for available networks
-    Serial.println("Scanning for WiFi networks... stby");
-    int numNetworks = WiFi.scanNetworks();
-    showWiFiNetworksFound(numNetworks);
-
-    // Try to connect to each AP in the priority list
-    for (int i = 0; i < numAPs; i++) {
-        for (int j = 0; j < numNetworks; j++) {
-            if (strcmp(WiFi.SSID(j).c_str(), apList[i].ssid) == 0) {
-                Serial.printf("Trying to connect to: %s ", apList[i].ssid);
-
+   WiFi.setHostname(HOSTNAME); // set the hostname for the ESP32
+   WiFi.mode(WIFI_STA);
+   WiFi.disconnect();
+   //WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+   delay(100);
+   
+   // Scan for available networks
+   Serial.println("Scanning for WiFi networks... stby");
+   int numNetworks = WiFi.scanNetworks();
+   showWiFiNetworksFound(numNetworks);
+   
+   // Try to connect to each AP in the priority list
+   for (int i = 0; i < numAPs; i++) {
+       for (int j = 0; j < numNetworks; j++) {
+           if (strcmp(WiFi.SSID(j).c_str(), apList[i].ssid) == 0) {
+               Serial.printf("Trying to connect to: %s ", apList[i].ssid);
+               
                 WiFi.begin(apList[i].ssid, apList[i].password);
 
                 // Wait for connection

@@ -13,7 +13,7 @@
 // #define LOCAL_PASS "00988900"
 
 // Change the hostname, hostname can only contain letters, numbers, and hyphens.
-const char* HOSTNAME = "FVP-STORM-MONITOR"; // 14-dec-2024 w9zv
+const char* HOSTNAME = "STORM-MONITOR"; // 14-dec-2024 w9zv
 
 // once  you are read to go live these settings are what you client will connect to
 #define AP_SSID "TestWebSite"
