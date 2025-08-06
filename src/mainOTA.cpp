@@ -287,10 +287,10 @@ void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
 void PrintWiFiAddressOnTFT() {
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(1);
-    tft.setCursor(100,150,2);
+    tft.setCursor(5,150,2);
     tft.setTextPadding(tft.width());  // pad it the width of the screen.
     if( bWiFi_Connected ) {
-        tft.printf("Network: %s %d dBm", WiFi.localIP().toString(),WiFi.RSSI()); 
+        tft.printf("Network: %s %s %d dBm", WiFi.getHostname(), WiFi.localIP().toString(), WiFi.RSSI()); 
     } else {
         tft.printf("Network: DISCONNECTED   "); 
     }
