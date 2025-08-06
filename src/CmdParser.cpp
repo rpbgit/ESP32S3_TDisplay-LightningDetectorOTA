@@ -1,5 +1,9 @@
 #include "CmdParser.h"
 
+// Add this line to access WebText from other files
+extern void WebText(const char *format, ...);
+
+
 CommandParser::CommandParser(CommandEntry *commands, int numCommands) 
     : commandTable(commands), numCommands(numCommands), bufferIndex(0), historyCount(0), historyIndex(-1) {
         memset(inputBuffer, 0, sizeof(inputBuffer));
@@ -102,7 +106,8 @@ void CommandParser::parseCommand(char* command)
             return;
         }
     }
-    Serial.printf(" <--Unknown command\n"); // if we fall thru, its unknown
+    //Serial.printf("%s <--Unknown command\n", command); // if we fall thru, its unknown
+    WebText("Unknown command: %s\n", command);
 }
 
 void CommandParser::toLowerCase(char *str) {

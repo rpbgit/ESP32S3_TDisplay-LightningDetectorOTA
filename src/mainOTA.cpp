@@ -399,7 +399,6 @@ String wrapXmlTag(String tagName, const String& content) {
     }
 }
 
-
 void SendJSON(AsyncWebServerRequest *request) {
     // Use a slightly larger buffer if needed, but keep it reasonable
     StaticJsonDocument<4096> doc;

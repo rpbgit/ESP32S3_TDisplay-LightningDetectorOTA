@@ -128,12 +128,14 @@ try to remember to bump this each time a functional mod is done
 05-Aug-2025 w9zv    v9.0    new feature, added mDNS support for hostname resolution, so the storm monitor can be accessed by its hostname rather than IP address.  
                             unique hostname derived by adding the last two octets (in hex) from MAC address appended to HOSTNAME, added some serial 
                             port messages to indicate above.
+06-Aug-2025 w9zv    v9.1    made the coolterm plotting capabilities a compilation option, so it can be turned on or off by defining ENABLE_COOLTERM_PLOTTING.
+                            fixed random XML timeouts, caused by race condition, added "invalid command" to command parser to handle invalid commands, sent to WebText.
 */
 
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v9.0";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v9.1";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
@@ -1029,6 +1031,8 @@ void stats_generation(int interrupt_source_register)
         (gStats.noiseRate     != prevNoiseRate)     ||
         (gStats.purgeRate     != prevPurgeRate);
 
+#ifdef ENABLE_COOLTERM_PLOTTING
+    // if you want to plot the rates in coolterm, then define the above macro ENABLE_COOLTERM_PLOTTING
     if (ratesChanged && (rateUpdateCount * RATE_UPDATE_INTERVAL_MS) >= 60000UL ) {
         if(anyRateNonZero) {
             WebText(
@@ -1041,6 +1045,7 @@ void stats_generation(int interrupt_source_register)
         WebText( "\tMax Rate: strike %.1f/min, disturbers %.1f/min, noise %.1f/min, purges %.1f/min\n",
                     gStats.maxStrikeRate, gStats.maxDisturberRate, gStats.maxNoiseRate, gStats.maxPurgeRate );
     }
+#endif
     // Update previous rates to detect change
     prevStrikeRate     = gStats.strikeRate;
     prevDisturberRate  = gStats.disturberRate;
