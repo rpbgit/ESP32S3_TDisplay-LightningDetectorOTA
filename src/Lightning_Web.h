@@ -850,39 +850,54 @@ const char PAGE_MAIN[] PROGMEM = R"=====(
     const XML_TIMEOUT_MS = 5000;            // Seconds per XML request
     const XML_TIMEOUT_LIMIT = 3;            // Reload after 3 consecutive timeouts
     let reloadInterval = null;              // Interval handle for repeated reloads
+    // Add this global variable at the top of your script
+    let globalTimeoutHandle = null;
 
     // Poll ESP32 for data
     function process() {
       let timedOut = false;
+      
+      // Clear any existing timeout before creating a new one
+      if (globalTimeoutHandle) {
+        clearTimeout(globalTimeoutHandle);
+        globalTimeoutHandle = null;
+      }
+      
       // Start a timeout for the XML request
-      let timeoutHandle = setTimeout(function() {
+      globalTimeoutHandle = setTimeout(function() {
         timedOut = true;
         xmlTimeoutCount++;
         TextLog(`XML request timed out (${xmlTimeoutCount}/${XML_TIMEOUT_LIMIT})`);
         if (xmlTimeoutCount >= XML_TIMEOUT_LIMIT) {
-          TextLog("Too many XML timeouts. Attempting to reload the web page...");
-          tryReloadUntilSuccess();
+            TextLog("Too many XML timeouts. Attempting to reload the web page...");
+            tryReloadUntilSuccess();
         }
+        globalTimeoutHandle = null; // Clear the handle
       }, XML_TIMEOUT_MS);
 
       // Only send a new request if ready
       if (xmlHttp.readyState == 0 || xmlHttp.readyState == 4) {
-        xmlHttp.open("GET", "json", true); // Use JSON endpoint for better performance
+        xmlHttp.open("GET", "json", true);
         xmlHttp.onreadystatechange = function() {
           if (xmlHttp.readyState == 4) {
-            clearTimeout(timeoutHandle);
+            // Clear the global timeout
+            if (globalTimeoutHandle) {
+              clearTimeout(globalTimeoutHandle);
+              globalTimeoutHandle = null;
+            }
             if (!timedOut) {
               if (xmlTimeoutCount > 0) TextLog("XML request succeeded, resetting timeout counter.");
-              xmlTimeoutCount = 0; // Reset on success
+              xmlTimeoutCount = 0;
               response();
             }
           }
         };
         xmlHttp.send(null);
       }
-      // Continue polling if not using simulated data and not in reload mode
+      
+      // Continue polling
       if (!USE_SIMULATED_DATA && reloadInterval === null)
-        setTimeout(process, 500); // Poll the server every 500ms
+        setTimeout(process, 500);
     }
 
     // This function will continuously try to reload the page until it succeeds
