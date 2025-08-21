@@ -253,7 +253,11 @@ void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info)
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
 {
-    bWiFi_Connected = true; // Only after we get the IP Address, can we do things.
+    bWiFi_Connected = true;
+    
+    // **ADD THIS LINE** - Disable WiFi power management sleep
+    WiFi.setSleep(false);
+    Serial.println("WiFi sleep mode disabled");
 
     Serial.print("\n\tWiFi EVENT_WIFI_STA_GOT_IP address: ");
     Serial.println(WiFi.localIP());

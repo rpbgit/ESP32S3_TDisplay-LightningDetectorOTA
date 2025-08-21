@@ -130,12 +130,14 @@ try to remember to bump this each time a functional mod is done
                             port messages to indicate above.
 06-Aug-2025 w9zv    v9.1    made the coolterm plotting capabilities a compilation option, so it can be turned on or off by defining ENABLE_COOLTERM_PLOTTING.
                             fixed random XML timeouts, caused by race condition, added "invalid command" to command parser to handle invalid commands, sent to WebText.
+20-Aug-2025 w9zv    v9.2    added Disable WiFi power management sleep WiFi.setSleep(false) to main code.
+
 */
 
 
 // define the version of the code which is displayed on TFT/Serial/and web page. This is the version of the code, not the hardware.
 // pse update this whenver a new version of the code is released.
-constexpr const char* CODE_VERSION_STR = "v9.1";  // a string for the application version number
+constexpr const char* CODE_VERSION_STR = "v9.2";  // a string for the application version number
 
 // a widget to stop/hold further execution of the code until we get sent something from the host
 // it will also print out the line of source code it is being executed in.
