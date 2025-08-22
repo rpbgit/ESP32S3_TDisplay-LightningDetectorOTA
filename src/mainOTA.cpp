@@ -45,6 +45,10 @@ void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_
 void PWR_Select_handler(AsyncWebServerRequest *request);
 void R1Select_handler(AsyncWebServerRequest *request);
 void TermInput_handler(AsyncWebServerRequest *request);
+// *NEW 
+void performHealthCheck();
+void analyzeMemoryUsage();
+const char* getWiFiStatusString(int status);
 /* void R2Select_handler(AsyncWebServerRequest *request);
 void R3Select_handler(AsyncWebServerRequest *request);
 void R4Select_handler(AsyncWebServerRequest *request);
@@ -217,30 +221,51 @@ void loop()
 
     // Check if WiFi is disconnected and it's time to attempt reconnection
     if (!bWiFi_Connected && millis() - lastReconnectAttempt >= reconnectInterval) {
-        Serial.println("Attempting to reconnect to WiFi...");
+        WebText("Attempting WiFi reconnection...\n");
         WiFi.reconnect();
-        lastReconnectAttempt = millis(); // Reset the timer
+        lastReconnectAttempt = millis();
     }
 
-    // Monitor IP Address every 3 seconds on TFT, see if we lost it
+    // Monitor IP Address every 3 seconds on TFT
     static unsigned long lastIntervalTime = 0;
     if (millis() - lastIntervalTime > 3000) {
         PrintWiFiAddressOnTFT();
         lastIntervalTime = millis();
     }
 
-    // All the hardware management is handled by loop2() in xxx_hw.ino/cpp
-    loop2(gHostCmd);
+    // **NEW** - Perform automated health checks (includes full system health on first run)
+    performHealthCheck();
 
-    // Give other threads/tasks a chance
+    // Keep memory analysis (every 30 minutes)
+    static unsigned long lastMemoryAnalysis = 0;
+    if (millis() - lastMemoryAnalysis > 1800000) {  // 30 minutes
+        analyzeMemoryUsage();
+        lastMemoryAnalysis = millis();
+    }
+
+    // Reset longest loop time every hour
+    static unsigned long lastLoopReset = 0;
+    if (millis() - lastLoopReset > 3600000) {  // 1 hour
+        if (gLongest_loop_time > 50) {
+            WebText("Hourly report - Max loop time: %lu ms\n", gLongest_loop_time);
+        }
+        gLongest_loop_time = 0;
+        lastLoopReset = millis();
+    }
+
+    // Hardware management
+    loop2(gHostCmd);
     delay(2);
 
-    // Now measure elapsed time for the whole loop
+    // Loop timing
     unsigned long elapsed = millis() - loopBegin;
     if (elapsed > gLongest_loop_time) {
         gLongest_loop_time = elapsed;
-        Serial.print(F("EXEC_LOOP MAX LATENCY MS: "));
-        Serial.println(gLongest_loop_time, DEC);
+        WebText("EXEC_LOOP MAX LATENCY MS: %lu ms\n", gLongest_loop_time);
+        
+        if (elapsed > 100) {
+            WebText("WARNING: Long loop time: %lu ms\n", elapsed);
+        }
     }
 }
 
@@ -255,37 +280,120 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
 {
     bWiFi_Connected = true;
     
-    // **ADD THIS LINE** - Disable WiFi power management sleep
+    // Disable WiFi power management sleep
     WiFi.setSleep(false);
-    Serial.println("WiFi sleep mode disabled");
+    WebText("WiFi connected - sleep mode disabled\n");
 
-    Serial.print("\n\tWiFi EVENT_WIFI_STA_GOT_IP address: ");
-    Serial.println(WiFi.localIP());
-    Serial.printf("\tHostname set to: %s\n", WiFi.getHostname());
+    WebText("WiFi EVENT_WIFI_STA_GOT_IP address: %s\n", WiFi.localIP().toString().c_str());
+    WebText("Hostname set to: %s\n", WiFi.getHostname());
+    WebText("SSID: %s\n", WiFi.SSID().c_str());
+    WebText("BSSID: %s\n", WiFi.BSSIDstr().c_str());
+    WebText("RSSI: %d dBm\n", WiFi.RSSI());
+    WebText("Channel: %d\n", WiFi.channel());
+    WebText("Gateway: %s\n", WiFi.gatewayIP().toString().c_str());
+    WebText("Subnet: %s\n", WiFi.subnetMask().toString().c_str());
+    WebText("DNS: %s\n", WiFi.dnsIP().toString().c_str());
+    
+    // Log connection quality
+    int rssi = WiFi.RSSI();
+    if (rssi > -50) {
+        WebText("Signal strength: Excellent (%d dBm)\n", rssi);
+    } else if (rssi > -60) {
+        WebText("Signal strength: Good (%d dBm)\n", rssi);
+    } else if (rssi > -70) {
+        WebText("Signal strength: Fair (%d dBm)\n", rssi);
+    } else {
+        WebText("WARNING: Signal strength: Poor (%d dBm) - may cause disconnections\n", rssi);
+    }
     
     // Initialize mDNS for local hostname resolution
     if (!MDNS.begin(WiFi.getHostname())) {
-        Serial.println("\tError setting up mDNS responder!");
+        WebText("ERROR: mDNS setup failed\n");
     } else {
-        Serial.printf("\tmDNS responder started. Hostname: %s.local\n", WiFi.getHostname());
-        Serial.printf("\tTry accessing: http://%s.local/\n", WiFi.getHostname());
+        WebText("mDNS responder started. Hostname: %s.local\n", WiFi.getHostname());
+        WebText("Try accessing: http://%s.local/\n", WiFi.getHostname());
         // Add service to mDNS registry
         MDNS.addService("http", "tcp", 80);
         MDNS.addService("lightning", "tcp", 80);
-        Serial.println("\tmDNS services registered (http, lightning)");
+        WebText("mDNS services registered (http, lightning)\n");
     }
+    
+    // Log memory status after successful connection
+    WebText("Free heap after connection: %d bytes\n", ESP.getFreeHeap());
 }
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
 {
     bWiFi_Connected = false;
 
-    Serial.println("\r\tDisconnected from WiFi access point");
-    Serial.print("\tWiFi lost connection. Reason: ");
-    Serial.println(info.wifi_sta_disconnected.reason);
+    WebText("Disconnected from WiFi access point\n");
+    WebText("WiFi lost connection. Reason: %d (", info.wifi_sta_disconnected.reason);
+    
+    // Add detailed reason descriptions
+    switch(info.wifi_sta_disconnected.reason) {
+        case 1: 
+            WebText("UNSPECIFIED - General failure)\n");
+            break;
+        case 2: 
+            WebText("AUTH_EXPIRE - Authentication expired)\n");
+            break;
+        case 3: 
+            WebText("AUTH_LEAVE - Deauthenticated because sending STA is leaving)\n");
+            break;
+        case 4: 
+            WebText("ASSOC_EXPIRE - Disassociated due to inactivity)\n");
+            break;
+        case 5: 
+            WebText("ASSOC_TOOMANY - Too many clients)\n");
+            break;
+        case 6: 
+            WebText("NOT_AUTHED - Not authenticated)\n");
+            break;
+        case 7: 
+            WebText("NOT_ASSOCED - Not associated)\n");
+            break;
+        case 8: 
+            WebText("ASSOC_LEAVE - ESP32 initiated disconnect (POWER MGMT?))\n");
+            break;
+        case 15: 
+            WebText("4WAY_HANDSHAKE_TIMEOUT - WPA handshake timeout)\n");
+            break;
+        case 200: 
+            WebText("BEACON_TIMEOUT - Lost beacon from AP)\n");
+            break;
+        case 201: 
+            WebText("NO_AP_FOUND - Access point not found)\n");
+            break;
+        case 202: 
+            WebText("AUTH_FAIL - Authentication failed)\n");
+            break;
+        case 203: 
+            WebText("ASSOC_FAIL - Association failed)\n");
+            break;
+        case 204: 
+            WebText("HANDSHAKE_TIMEOUT - Handshake timeout)\n");
+            break;
+        default: 
+            WebText("UNKNOWN_%d)\n", info.wifi_sta_disconnected.reason);
+            break;
+    }
+
+    // Log additional WiFi status information
+    WebText("Previous RSSI: %d dBm\n", WiFi.RSSI());
+    WebText("WiFi Mode: %d\n", WiFi.getMode());
+    WebText("Auto Reconnect: %s\n", WiFi.getAutoReconnect() ? "enabled" : "disabled");
+    
+    // Log memory status at disconnect
+    WebText("Free heap at disconnect: %d bytes\n", ESP.getFreeHeap());
+    WebText("Min free heap: %d bytes\n", ESP.getMinFreeHeap());
 
     // Start the reconnection timer
     lastReconnectAttempt = millis();
+    
+    // Force a memory check and log if memory is critically low
+    if (ESP.getFreeHeap() < 10000) {
+        WebText("WARNING: Low memory at WiFi disconnect - %d bytes free\n", ESP.getFreeHeap());
+    }
 }
 
 void PrintWiFiAddressOnTFT() {
@@ -293,10 +401,31 @@ void PrintWiFiAddressOnTFT() {
     tft.setTextSize(1);
     tft.setCursor(5,150,2);
     tft.setTextPadding(tft.width());  // pad it the width of the screen.
+    
     if( bWiFi_Connected ) {
-        tft.printf("Network: %s %s %d dBm", WiFi.getHostname(), WiFi.localIP().toString(), WiFi.RSSI()); 
+        int rssi = WiFi.RSSI();
+        tft.printf("Network: %s %s %d dBm", WiFi.getHostname(), WiFi.localIP().toString(), rssi); 
+        
+        // Log weak signals that might cause future disconnections
+        if (rssi < -75) {
+            static unsigned long lastWeakSignalLog = 0;
+            if (millis() - lastWeakSignalLog > 30000) {  // Log every 30 seconds
+                WebText("WARNING: Weak WiFi signal: %d dBm\n", rssi);
+                lastWeakSignalLog = millis();
+            }
+        }
     } else {
         tft.printf("Network: DISCONNECTED   "); 
+        
+        // Show reconnection status
+        static unsigned long lastReconnectDisplay = 0;
+        if (millis() - lastReconnectDisplay > 5000) {  // Update every 5 seconds
+            unsigned long timeSinceDisconnect = millis() - lastReconnectAttempt;
+            if (timeSinceDisconnect < reconnectInterval) {
+                WebText("Reconnect attempt in %lu ms\n", reconnectInterval - timeSinceDisconnect);
+            }
+            lastReconnectDisplay = millis();
+        }
     }
     tft.setTextSize(1);
 }
@@ -403,8 +532,11 @@ String wrapXmlTag(String tagName, const String& content) {
     }
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void SendJSON(AsyncWebServerRequest *request) {
-    // Use a slightly larger buffer if needed, but keep it reasonable
+    // Use StaticJsonDocument to avoid heap allocation (suppressed deprecation warning)
     StaticJsonDocument<4096> doc;
 
     get_hardware_status(RAS_Status);
@@ -444,91 +576,8 @@ void SendJSON(AsyncWebServerRequest *request) {
     Serial.println("JSON: " + debugBuffer);
     #endif
 }
-// this function will get the current status of all hardware and create the XML message with status
-// and send it back to the page
-// void SendXML(AsyncWebServerRequest *request) {
-//     // New implementation using String with reserved memory
-//     static char tempBuffer[4096] = {0};
-//     static String xmlData;
-//     xmlData.reserve(4096); // Reserve memory to minimize reallocations
 
-//     xmlData = "<?xml version='1.0'?>\n<Data>\n";
-
-//     // Add hardware status
-//     get_hardware_status(RAS_Status);
-//     xmlData += pRas->PWR_Button ? "<PWR>1</PWR>\n" : "<PWR>0</PWR>\n";
-
-//     // Add other tags (unchanged)
-//     xmlData += "<NOISE_ACC>" + String(pRas->noise_accum) + "</NOISE_ACC>\n";
-//     xmlData += "<NOISE_ET>" + String(pRas->noise_et) + "</NOISE_ET>\n";
-//     xmlData += "<DISTURB_ACC>" + String(pRas->disturber_accum) + "</DISTURB_ACC>\n";
-//     xmlData += "<DISTURB_ET>" + String(pRas->disturber_et) + "</DISTURB_ET>\n";
-//     xmlData += "<STRIKE_ACC>" + String(pRas->strike_accum) + "</STRIKE_ACC>\n";
-//     xmlData += "<STRIKE_ET>" + String(pRas->strike_et) + "</STRIKE_ET>\n";
-//     xmlData += "<STRIKE_DIST>" + String(pRas->strike_distance,1) + "</STRIKE_DIST>\n";
-//     xmlData += "<STRIKE_ENER>" + String(pRas->strike_energy) + "</STRIKE_ENER>\n";
-
-//     // --- Add new RATES tag as a comma-separated list from pRas rate fields ---
-//     // Use the float rate fields, not the *_accum fields
-//     xmlData += "<RATES>";
-//     xmlData += String(pRas->strikeRate, 2) + ",";
-//     xmlData += String(pRas->disturberRate, 2) + ",";
-//     xmlData += String(pRas->noiseRate, 2) + ",";
-//     xmlData += String(pRas->purgeRate, 2); // No trailing comma
-//     xmlData += "</RATES>\n";
-//     // -------------------------------------------------------------------------
-
-//     // Add version
-//     xmlData += "<VER>";
-//     xmlData += RAS_Status.pSoftwareVersion;
-//     xmlData += "</VER>\n";
-
-//     // Add INFO tag if the RingBuffer is not empty
-//     if (!RingBuffer.isEmpty()) { 
-//         RingBuffer.concat_and_remove_all(tempBuffer);
-//         xmlData += wrapXmlTag("INFO", tempBuffer);
-//     }
-//     xmlData += "</Data>\n";
-    
-//     // Send the XML data
-//     request->send(200, "text/xml", xmlData);
-// }
-// /*
-// // Original implementation using global XML_buffer
-// void SendXML(AsyncWebServerRequest *request) {
-//     XML_buffer[0] = 0; // make sure the buffer is empty before we start building it.
-
-//     // Collect the hardware status that reflects the current state of the buttons/LEDs
-//     get_hardware_status(RAS_Status);
-
-//     strcpy(XML_buffer, "<?xml version='1.0'?>\n<Data>\n");
-
-//     strcat(XML_buffer, pRas->PWR_Button ? "<PWR>1</PWR>\n" : "<PWR>0</PWR>\n");
-
-//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "NOISE_ACC", pRas->noise_accum);
-//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "NOISE_ET", pRas->noise_et);
-//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "DISTURB_ACC", pRas->disturber_accum);
-//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "DISTURB_ET", pRas->disturber_et);
-//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_ACC", pRas->strike_accum);
-//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_ET", pRas->strike_et);
-//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_DIST", pRas->strike_distance);
-//     buildXmlTag(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer) - 1, "STRIKE_ENER", pRas->strike_energy);
-
-//     snprintf(XML_buffer + strlen(XML_buffer), sizeof(XML_buffer) - strlen(XML_buffer),
-//              "<VER>%s</VER>\n", RAS_Status.pSoftwareVersion);
-
-//     if (!RingBuffer.isEmpty()) {
-//         strcat(XML_buffer + strlen(XML_buffer), "<INFO>");
-//         RingBuffer.concat_all(XML_buffer + strlen(XML_buffer));
-//         strcat(XML_buffer + strlen(XML_buffer), "</INFO>\n");
-//     }
-//     RingBuffer.delete_all();
-
-//     strcat(XML_buffer, "</Data>\n");
-
-//     request->send(200, "text/xml", XML_buffer);
-// }
-// */
+#pragma GCC diagnostic pop
 
 void WebText(const char *format, ...) {
     // Temporary buffer to hold the formatted string
@@ -699,140 +748,169 @@ void showWiFiNetworksFound(int numNetworks) {
     }
 }
 
-// void printRequestDetails(AsyncWebServerRequest *request) {
-//     // Print the HTTP method (GET, POST, etc.)
-//     Serial.print("Method: ");
-//     switch (request->method()) {
-//         case HTTP_GET: Serial.println("GET"); break;
-//         case HTTP_POST: Serial.println("POST"); break;
-//         case HTTP_DELETE: Serial.println("DELETE"); break;
-//         case HTTP_PUT: Serial.println("PUT"); break;
-//         case HTTP_PATCH: Serial.println("PATCH"); break;
-//         case HTTP_HEAD: Serial.println("HEAD"); break;
-//         case HTTP_OPTIONS: Serial.println("OPTIONS"); break;
-//         default: Serial.println("UNKNOWN"); break;
-//     }
+// Helper function to convert WiFi status to string
+const char* getWiFiStatusString(int status) {
+    switch(status) {
+        case WL_IDLE_STATUS: return "IDLE";
+        case WL_NO_SSID_AVAIL: return "NO_SSID_AVAILABLE";
+        case WL_SCAN_COMPLETED: return "SCAN_COMPLETED";
+        case WL_CONNECTED: return "CONNECTED";
+        case WL_CONNECT_FAILED: return "CONNECT_FAILED";
+        case WL_CONNECTION_LOST: return "CONNECTION_LOST";
+        case WL_DISCONNECTED: return "DISCONNECTED";
+        default: return "UNKNOWN";
+    }
+}
 
-//     // Print the URL
-//     Serial.print("URL: ");
-//     Serial.println(request->url());
+// Health check function that monitors system status and alerts on issues
+void performHealthCheck() {
+    static unsigned long lastHealthCheck = 0;
+    static int healthCheckCount = 0;
+    static bool firstHealthCheckDone = false;
+    
+    // Check if it's time for a health check
+    bool timeForCheck = false;
+    
+    if (!firstHealthCheckDone) {
+        // First health check - run immediately
+        timeForCheck = true;
+        firstHealthCheckDone = true;
+    } else {
+        // Subsequent checks - only run every 2 minutes
+        if (millis() - lastHealthCheck >= 120000) {
+            timeForCheck = true;
+        }
+    }
+    
+    if (!timeForCheck) {
+        return;
+    }
+    
+    lastHealthCheck = millis();
+    healthCheckCount++;
+    
+    // For the first health check, print full system health report 
+    if (healthCheckCount == 1) {
+        WebText("=== INITIAL SYSTEM HEALTH CHECK ===\n");
+        
+        WebText("Free heap: %d bytes\n", ESP.getFreeHeap());
+        WebText("Min free heap: %d bytes\n", ESP.getMinFreeHeap());
+        WebText("Largest free block: %d bytes\n", ESP.getMaxAllocHeap());
+        WebText("Total heap size: %d bytes\n", ESP.getHeapSize());
+        WebText("WiFi status: %d (%s)\n", WiFi.status(), getWiFiStatusString(WiFi.status()));
+        
+        if (bWiFi_Connected) {
+            WebText("RSSI: %d dBm\n", WiFi.RSSI());
+            WebText("SSID: %s\n", WiFi.SSID().c_str());
+            WebText("IP: %s\n", WiFi.localIP().toString().c_str());
+            WebText("Hostname: %s\n", WiFi.getHostname());
+        }
+        
+        WebText("Uptime: %lu ms (%.1f hours)\n", millis(), millis() / 3600000.0);
+        WebText("Longest loop time: %lu ms\n", gLongest_loop_time);
+        WebText("ESP chip: %s\n", ESP.getChipModel());
+        WebText("CPU frequency: %d MHz\n", ESP.getCpuFreqMHz());
+        WebText("Flash size: %d bytes\n", ESP.getFlashChipSize());
+        WebText("Flash speed: %d Hz\n", ESP.getFlashChipSpeed());
+        WebText("Sketch size: %d bytes\n", ESP.getSketchSize());
+        WebText("Free sketch space: %d bytes\n", ESP.getFreeSketchSpace());
+        WebText("Temperature: %.1f°C\n", temperatureRead());
+        
+        // Initial memory analysis
+        size_t totalHeap = ESP.getHeapSize();
+        size_t freeHeap = ESP.getFreeHeap();
+        size_t usedHeap = totalHeap - freeHeap;
+        size_t maxAllocHeap = ESP.getMaxAllocHeap();
+        
+        float fragmentation = 0;
+        if (freeHeap > 0) {
+            fragmentation = ((float)(freeHeap - maxAllocHeap) / freeHeap) * 100.0;
+        }
+        WebText("Heap fragmentation: %.1f%%\n", fragmentation);
+        WebText("Stack high water mark: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
+        
+        WebText("=== INITIAL HEALTH CHECK COMPLETE ===\n");
+    } else {
+        // Regular scheduled health checks (abbreviated)
+        WebText("--- Health Check #%d ---\n", healthCheckCount);
+    }
+    
+    // Common health checks for all runs (first and subsequent)
+    size_t freeHeap = ESP.getFreeHeap();
+    size_t minFreeHeap = ESP.getMinFreeHeap();
+    
+    if (freeHeap < 20000) {
+        WebText("ALERT: Critical low memory - %d bytes free\n", freeHeap);
+    } else if (freeHeap < 50000) {
+        WebText("WARNING: Low memory - %d bytes free\n", freeHeap);
+    }
+    
+    // Check memory fragmentation
+    if (freeHeap > minFreeHeap + 30000) {
+        WebText("WARNING: Possible memory fragmentation (current: %d, min: %d)\n", freeHeap, minFreeHeap);
+    }
+    
+    // Check WiFi health
+    if (!bWiFi_Connected) {
+        WebText("ALERT: WiFi disconnected for %lu seconds\n", (millis() - lastReconnectAttempt) / 1000);
+    } else {
+        int rssi = WiFi.RSSI();
+        if (rssi < -80) {
+            WebText("WARNING: Very weak WiFi signal: %d dBm\n", rssi);
+        } else if (rssi < -70) {
+            WebText("INFO: Weak WiFi signal: %d dBm\n", rssi);
+        }
+    }
+    
+    // Check loop performance
+    if (gLongest_loop_time > 200) {
+        WebText("WARNING: Slow loop performance - max %lu ms\n", gLongest_loop_time);
+    }
+    
+    // Check temperature
+    float temp = temperatureRead();
+    if (temp > 80.0) {
+        WebText("ALERT: High temperature: %.1f°C\n", temp);
+    } else if (temp > 70.0) {
+        WebText("WARNING: Elevated temperature: %.1f°C\n", temp);
+    }
+    
+    // Final status
+    if (healthCheckCount == 1) {
+        WebText("Initial health check complete\n");
+    } else if (freeHeap >= 50000 && bWiFi_Connected && gLongest_loop_time <= 200 && temp <= 70.0) {
+        WebText("Health check complete - System OK\n");
+    }
+}
 
-//     // Print the client's IP address
-//     Serial.print("Client IP: ");
-//     Serial.println(request->client()->remoteIP().toString());
+// Memory usage analysis function
+void analyzeMemoryUsage() {
+    WebText("--- Memory Analysis ---\n");
+    
+    size_t totalHeap = ESP.getHeapSize();
+    size_t freeHeap = ESP.getFreeHeap();
+    size_t usedHeap = totalHeap - freeHeap;
+    size_t minFreeHeap = ESP.getMinFreeHeap();
+    size_t maxAllocHeap = ESP.getMaxAllocHeap();
+    
+    WebText("Total heap: %d bytes\n", totalHeap);
+    WebText("Used heap: %d bytes (%.1f%%)\n", usedHeap, (usedHeap * 100.0) / totalHeap);
+    WebText("Free heap: %d bytes (%.1f%%)\n", freeHeap, (freeHeap * 100.0) / totalHeap);
+    WebText("Min free heap: %d bytes\n", minFreeHeap);
+    WebText("Max allocatable block: %d bytes\n", maxAllocHeap);
+    
+    // Calculate fragmentation
+    float fragmentation = 0;
+    if (freeHeap > 0) {
+        fragmentation = ((float)(freeHeap - maxAllocHeap) / freeHeap) * 100.0;
+    }
+    WebText("Heap fragmentation: %.1f%%\n", fragmentation);
+    
+    if (fragmentation > 50.0) {
+        WebText("WARNING: High heap fragmentation detected\n");
+    }
+    
+    WebText("Stack high water mark: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
+    WebText("----------------------\n");
+}
 
-//     // Print the HTTP version
-//     Serial.print("HTTP Version: ");
-//     Serial.println(request->version());
-
-//     // Print the number of headers
-//     Serial.print("Headers: ");
-//     Serial.println(request->headers());
-
-//     // Print all headers
-//     for (int i = 0; i < request->headers(); i++) {
-//         AsyncWebHeader *header = request->getHeader(i);
-//         Serial.print(header->name());
-//         Serial.print(": ");
-//         Serial.println(header->value());
-//     }
-
-//     // Print query parameters if any
-//     Serial.print("Params: ");
-//     Serial.println(request->params());
-//     for (int i = 0; i < request->params(); i++) {
-//         AsyncWebParameter *p = request->getParam(i);
-//         Serial.print(p->name());
-//         Serial.print(": ");
-//         Serial.println(p->value());
-//     }
-
-//     // Print the content length (useful for POST/PUT requests)
-//     Serial.print("Content Length: ");
-//     Serial.println(request->contentLength());
-// }
-
-// Function to handle POST request body data
-// void handleRequestBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-//     String body = String((char*)data).substring(0, len);
-//     Serial.println("Body received:");
-//     Serial.println(body);
-// }
-
-// Function to handle the body data
-// void handleBodyData(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-// Serial.println("handleBodyData() - ");
-//     // Convert the body data to a string
-//     String body = String((char*)data).substring(0, len);
-
-//     // Print the body data to the serial monitor
-//     Serial.println("Body received:");
-//     Serial.println(body);
-
-//     // Send a response back to the client
-//     request->send(200, "text/plain", "Data received: " + body);
-// }
-
-// void printRequestDetails(AsyncWebServerRequest *request) {
-//     // Print the HTTP method (GET, POST, etc.)
-//     Serial.print("Method: ");
-//     switch (request->method()) {
-//         case HTTP_GET: Serial.println("GET"); break;
-//         case HTTP_POST: Serial.println("POST"); break;
-//         case HTTP_DELETE: Serial.println("DELETE"); break;
-//         case HTTP_PUT: Serial.println("PUT"); break;
-//         case HTTP_PATCH: Serial.println("PATCH"); break;
-//         case HTTP_HEAD: Serial.println("HEAD"); break;
-//         case HTTP_OPTIONS: Serial.println("OPTIONS"); break;
-//         default: Serial.println("UNKNOWN"); break;
-//     }
-
-//     // Print the URL
-//     Serial.print("URL: ");
-//     Serial.println(request->url());
-
-//     // Print the client's IP address
-//     Serial.print("Client IP: ");
-//     Serial.println(request->client()->remoteIP().toString());
-
-//     // Print the HTTP version
-//     Serial.print("HTTP Version: ");
-//     Serial.println(request->version());
-
-//     // Print the number of headers
-//     Serial.print("Headers: ");
-//     Serial.println(request->headers());
-
-//     // Print all headers
-//     for (int i = 0; i < request->headers(); i++) {
-//         AsyncWebHeader *header = request->getHeader(i);
-//         Serial.print(header->name());
-//         Serial.print(": ");
-//         Serial.println(header->value());
-//     }
-
-//     // Print query parameters if any
-//     Serial.print("Params: ");
-//     Serial.println(request->params());
-//     for (int i = 0; i < request->params(); i++) {
-//         AsyncWebParameter *p = request->getParam(i);
-//         Serial.print(p->name());
-//         Serial.print(": ");
-//         Serial.println(p->value());
-//     }
-
-//     // Print the content length (useful for POST/PUT requests)
-//     Serial.print("Content Length: ");
-//     Serial.println(request->contentLength());
-
-//     // Print the body if it's a POST request
-//     if (request->method() == HTTP_POST || request->method() == HTTP_PUT) {
-//         request->onBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-//             Serial.println("Body: ");
-//             for (size_t src/main.cpp:438:18: error: 'class AsyncWebServerRequest' has no member named 'onBody'i = 0; i < len; i++) {
-//                 Serial.print((char)data[i]);
-//             }
-//             Serial.println();
-//         });
-//     }
-// }
